@@ -154,3 +154,29 @@ func TestClientUpdate(t *testing.T) {
 		t.Errorf("Update revision: got %d, want 2", s.Revision)
 	}
 }
+
+func TestClientLogEmptyRepo(t *testing.T) {
+	if _, err := exec.LookPath("svn"); err != nil {
+		t.Skip("svn not on PATH")
+	}
+	if _, err := exec.LookPath("svnadmin"); err != nil {
+		t.Skip("svnadmin not on PATH")
+	}
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	wc := filepath.Join(dir, "wc")
+	if out, err := exec.Command("svnadmin", "create", repo).CombinedOutput(); err != nil {
+		t.Fatalf("svnadmin create: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("svn", "checkout", "file://"+repo, wc).CombinedOutput(); err != nil {
+		t.Fatalf("svn checkout: %v\n%s", err, out)
+	}
+	c := New(wc)
+	entries, err := c.Log(10)
+	if err != nil {
+		t.Fatalf("Log on empty repo: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Log on empty repo: got %d entries, want 0", len(entries))
+	}
+}

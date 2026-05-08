@@ -49,7 +49,12 @@ func parseLog(data []byte) ([]LogEntry, error) {
 }
 
 func (c *Client) Log(limit int) ([]LogEntry, error) {
-	out, err := c.run("log", "--xml", "--limit", strconv.Itoa(limit))
+	// Use -r HEAD:1 so we see commits in the repository even if the
+	// working copy's base revision hasn't been updated (e.g. right
+	// after Commit(), which advances the repo head but not the WC
+	// base for the directory). Default `svn log` uses BASE:0 and
+	// would miss those commits.
+	out, err := c.run("log", "--xml", "--limit", strconv.Itoa(limit), "-r", "HEAD:1")
 	if err != nil {
 		return nil, err
 	}

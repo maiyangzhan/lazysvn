@@ -26,6 +26,11 @@ svn commit -m "initial" >/dev/null
 echo "second rev" > src/unchanged.sv
 svn commit -m "second revision" >/dev/null
 
+# Advance the working copy base revision to HEAD so `svn log` (which
+# defaults to BASE:0) sees both commits. Without this the checkout
+# stays pinned at r0 and Log() returns an empty list.
+svn update >/dev/null
+
 # Now create the status states the tests expect.
 echo "modified body" > src/modified.sv
 echo "brand new"     > src/added.sv

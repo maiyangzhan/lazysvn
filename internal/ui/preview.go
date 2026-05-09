@@ -26,6 +26,22 @@ func (p *PreviewPanel) View() tview.Primitive {
 	return p.view
 }
 
+func (p *PreviewPanel) ScrollHalfPageDown() {
+	_, _, _, h := p.view.GetInnerRect()
+	row, col := p.view.GetScrollOffset()
+	p.view.ScrollTo(row+h/2, col)
+}
+
+func (p *PreviewPanel) ScrollHalfPageUp() {
+	_, _, _, h := p.view.GetInnerRect()
+	row, col := p.view.GetScrollOffset()
+	newRow := row - h/2
+	if newRow < 0 {
+		newRow = 0
+	}
+	p.view.ScrollTo(newRow, col)
+}
+
 func (p *PreviewPanel) SetContent(text string) {
 	p.view.Clear()
 	p.view.SetText(colorizeDiff(text))

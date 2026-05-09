@@ -240,6 +240,7 @@ func (a *App) updateHints() {
 	if a.focused == 0 {
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
+			{Key: "^u/^d", Label: "scroll"},
 			{Key: "Space", Label: "mark"},
 			{Key: "c", Label: "commit"},
 			{Key: "r", Label: "revert"},
@@ -253,6 +254,7 @@ func (a *App) updateHints() {
 	} else {
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
+			{Key: "^u/^d", Label: "scroll"},
 			{Key: "Tab", Label: "switch"},
 			{Key: "u", Label: "update"},
 			{Key: "R", Label: "refresh"},
@@ -303,6 +305,12 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case tcell.KeyBacktab:
 		a.cycleFocus(-1)
+		return nil
+	case tcell.KeyCtrlD:
+		a.preview.ScrollHalfPageDown()
+		return nil
+	case tcell.KeyCtrlU:
+		a.preview.ScrollHalfPageUp()
 		return nil
 	}
 	switch event.Rune() {

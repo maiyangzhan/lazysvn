@@ -36,8 +36,10 @@ func ShowSpinner(app *tview.Application, root tview.Primitive, message string) f
 }
 
 func CommitPrompt(app *tview.Application, root tview.Primitive, onSubmit func(msg string)) {
-	textArea := tview.NewTextArea()
-	textArea.SetPlaceholder("Enter commit message...")
+	input := tview.NewInputField()
+	input.SetLabel("Message: ")
+	input.SetFieldWidth(46)
+	input.SetLabelColor(tcell.ColorYellow)
 
 	hint := tview.NewTextView()
 	hint.SetDynamicColors(true)
@@ -46,10 +48,12 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onSubmit func(ms
 	hint.SetBackgroundColor(tcell.ColorDarkSlateGray)
 
 	frame := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(textArea, 0, 1, true).
+		AddItem(nil, 0, 1, false).
+		AddItem(input, 1, 0, true).
+		AddItem(nil, 0, 1, false).
 		AddItem(hint, 1, 0, false)
 	frame.SetBorder(true)
-	frame.SetTitle(" Commit Message ")
+	frame.SetTitle(" Commit ")
 	frame.SetTitleColor(tcell.ColorYellow)
 	frame.SetBorderColor(tcell.ColorBlue)
 
@@ -59,25 +63,23 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onSubmit func(ms
 			AddItem(nil, 0, 1, false).
 			AddItem(frame, 60, 0, true).
 			AddItem(nil, 0, 1, false),
-			12, 0, true).
+			6, 0, true).
 		AddItem(nil, 0, 1, false)
 
-	textArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
-			msg := strings.TrimSpace(textArea.GetText())
+	input.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			msg := strings.TrimSpace(input.GetText())
 			app.SetRoot(root, true)
 			if msg != "" {
 				onSubmit(msg)
 			}
-			return nil
+			return
 		}
-		if event.Key() == tcell.KeyEscape {
+		if key == tcell.KeyEscape {
 			app.SetRoot(root, true)
-			return nil
 		}
-		return event
 	})
 
 	app.SetRoot(wrapper, true)
-	app.SetFocus(textArea)
+	app.SetFocus(input)
 }

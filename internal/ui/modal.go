@@ -7,15 +7,13 @@ import (
 	"github.com/rivo/tview"
 )
 
-func Confirm(app *tview.Application, root tview.Primitive, message string, onYes func()) {
+func Confirm(app *tview.Application, root tview.Primitive, message string, onDone func(yes bool)) {
 	modal := tview.NewModal().
 		SetText(message).
 		AddButtons([]string{"Yes", "No"}).
 		SetDoneFunc(func(_ int, label string) {
 			app.SetRoot(root, true)
-			if label == "Yes" {
-				onYes()
-			}
+			onDone(label == "Yes")
 		})
 	modal.SetBackgroundColor(tcell.ColorDarkSlateGray)
 	app.SetRoot(modal, true)
@@ -35,7 +33,7 @@ func ShowSpinner(app *tview.Application, root tview.Primitive, message string) f
 	}
 }
 
-func CommitPrompt(app *tview.Application, root tview.Primitive, onSubmit func(msg string)) {
+func CommitPrompt(app *tview.Application, root tview.Primitive, onDone func(msg string, cancelled bool)) {
 	input := tview.NewInputField()
 	input.SetLabel("Message: ")
 	input.SetFieldWidth(46)
@@ -70,13 +68,12 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onSubmit func(ms
 		if key == tcell.KeyEnter {
 			msg := strings.TrimSpace(input.GetText())
 			app.SetRoot(root, true)
-			if msg != "" {
-				onSubmit(msg)
-			}
+			onDone(msg, false)
 			return
 		}
 		if key == tcell.KeyEscape {
 			app.SetRoot(root, true)
+			onDone("", true)
 		}
 	})
 

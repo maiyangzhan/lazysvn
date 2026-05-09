@@ -24,8 +24,9 @@ type App struct {
 	panels  []focusable
 	focused int
 
-	logLimit int
-	debounce debouncer
+	logLimit    int
+	modalActive bool
+	debounce    debouncer
 }
 
 type focusable interface {
@@ -118,7 +119,12 @@ func (a *App) doCommit() {
 	}
 	paths := entriesToPaths(targets)
 
-	CommitPrompt(a.app, a.root, func(msg string) {
+	a.modalActive = true
+	CommitPrompt(a.app, a.root, func(msg string, cancelled bool) {
+		a.modalActive = false
+		if cancelled || msg == "" {
+			return
+		}
 		if err := a.client.Commit(paths, msg); err != nil {
 			a.reportError("commit", err)
 			return
@@ -136,7 +142,12 @@ func (a *App) doRevert() {
 	}
 	paths := entriesToPaths(targets)
 	msg := fmt.Sprintf("Revert %d file(s)?", len(paths))
-	Confirm(a.app, a.root, msg, func() {
+	a.modalActive = true
+	Confirm(a.app, a.root, msg, func(yes bool) {
+		a.modalActive = false
+		if !yes {
+			return
+		}
 		if err := a.client.Revert(paths); err != nil {
 			a.reportError("revert", err)
 			return
@@ -169,7 +180,12 @@ func (a *App) doRemove() {
 	}
 	paths := entriesToPaths(targets)
 	msg := fmt.Sprintf("Delete %d file(s)?", len(paths))
-	Confirm(a.app, a.root, msg, func() {
+	a.modalActive = true
+	Confirm(a.app, a.root, msg, func(yes bool) {
+		a.modalActive = false
+		if !yes {
+			return
+		}
 		if err := a.client.Remove(paths); err != nil {
 			a.reportError("remove", err)
 			return
@@ -278,6 +294,9 @@ func (a *App) Run() error {
 }
 
 func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
+	if a.modalActive {
+		return event
+	}
 	switch event.Key() {
 	case tcell.KeyTab:
 		a.cycleFocus(1)

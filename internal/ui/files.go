@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -105,6 +106,13 @@ func (p *FilesPanel) MarkedOrCurrent() []svn.FileEntry {
 }
 
 func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		oi, oj := statusOrder(entries[i].Status), statusOrder(entries[j].Status)
+		if oi != oj {
+			return oi < oj
+		}
+		return entries[i].Path < entries[j].Path
+	})
 	p.entries = entries
 	cur := p.list.GetCurrentItem()
 	p.list.Clear()
@@ -194,5 +202,22 @@ func statusColor(s svn.Status) string {
 		return "red"
 	default:
 		return "white"
+	}
+}
+
+func statusOrder(s svn.Status) int {
+	switch s {
+	case svn.Conflicted:
+		return 0
+	case svn.Modified:
+		return 1
+	case svn.Added:
+		return 2
+	case svn.Deleted:
+		return 3
+	case svn.Untracked:
+		return 4
+	default:
+		return 5
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/maiyangzhan/lazysvn/internal/editor"
 	"github.com/maiyangzhan/lazysvn/internal/logfile"
 	"github.com/maiyangzhan/lazysvn/internal/svn"
 )
@@ -117,25 +116,17 @@ func (a *App) doCommit() {
 	if len(targets) == 0 {
 		return
 	}
-
-	msg, err := editor.ForCommit(a.app)
-	if err != nil {
-		a.reportError("commit editor", err)
-		return
-	}
-	if msg == "" {
-		a.hints.ShowInfo("Commit aborted (empty message)")
-		return
-	}
-
 	paths := entriesToPaths(targets)
-	if err := a.client.Commit(paths, msg); err != nil {
-		a.reportError("commit", err)
-		return
-	}
-	a.files.ClearMarks()
-	a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
-	a.refreshAsync()
+
+	CommitPrompt(a.app, a.root, func(msg string) {
+		if err := a.client.Commit(paths, msg); err != nil {
+			a.reportError("commit", err)
+			return
+		}
+		a.files.ClearMarks()
+		a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
+		a.refreshAsync()
+	})
 }
 
 func (a *App) doRevert() {

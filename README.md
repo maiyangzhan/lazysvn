@@ -1,45 +1,72 @@
 # lazysvn
 
-A lazygit-style terminal UI for SVN. Single static binary, works standalone or from Vim.
+A [lazygit](https://github.com/jesseduffield/lazygit)-style terminal UI for Subversion (SVN).
+
+Browse file status, view diffs, commit, revert, and update — all without leaving the terminal. Ships as a single static binary with zero dependencies beyond `svn` itself.
+
+![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Linux%20x86__64-lightgrey)
+![License](https://img.shields.io/badge/License-MIT-blue)
+
+## Features
+
+- **Three-panel layout** — file status, commit log, and diff preview side by side
+- **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl-U`/`Ctrl-D` for preview scrolling
+- **File operations** — commit, revert, add, delete, mark resolved, all with single-key shortcuts
+- **Multi-select** — `Space` to mark multiple files for batch operations
+- **Live diff preview** — auto-updates as you navigate, with syntax coloring
+- **SVN update** — `u` to update with a progress indicator
+- **Status grouping** — files grouped by status (Conflicted > Modified > Added > Deleted > Untracked)
+- **Vim integration** — optional `:LazySvn` command to launch from inside Vim
+- **Offline-friendly** — single static binary, just `scp` to your server and run
 
 ## Install
 
-### CLI
+### Download prebuilt binary
 
-Download the binary for your platform and put it on your `$PATH`:
-
-```bash
-# On your Mac (build from source)
-make linux                          # cross-compile for Linux
-scp dist/lazysvn-linux-amd64 server:~/bin/lazysvn
-
-# On the server
-chmod +x ~/bin/lazysvn
-```
-
-### Vim plugin
-
-Copy the `vim-plugin/` contents into your Vim runtime path:
+Grab the latest release from the [Releases](https://github.com/maiyangzhan/lazysvn/releases) page:
 
 ```bash
-cp -r vim-plugin/* ~/.vim/
+curl -LO https://github.com/maiyangzhan/lazysvn/releases/latest/download/lazysvn-linux-amd64
+chmod +x lazysvn-linux-amd64
+sudo mv lazysvn-linux-amd64 /usr/local/bin/lazysvn
 ```
 
-Or with a plugin manager (e.g. vim-plug):
+### Build from source
 
-```vim
-Plug 'maiyangzhan/lazysvn', { 'rtp': 'vim-plugin' }
+Requires Go 1.22+.
+
+```bash
+git clone https://github.com/maiyangzhan/lazysvn.git
+cd lazysvn
+make build          # build for current platform
+make linux          # cross-compile for Linux x86_64 (static binary)
 ```
+
+The output binary is at `dist/lazysvn-linux-amd64` (cross-compiled) or `./lazysvn` (native).
 
 ## Usage
 
 ```bash
-lazysvn                     # run in current directory
-lazysvn --cwd /path/to/wc   # specify working copy
+lazysvn                     # run in current SVN working copy
+lazysvn --cwd /path/to/wc   # specify a different working copy
 lazysvn --log-limit 100     # show more log entries (default: 50)
 ```
 
-From Vim: `:LazySvn` or `<Leader>s`.
+## Layout
+
+```
+┌─────── Files ────────┬──────── Preview ──────────┐
+│  M  src/main.go      │ --- a/src/main.go         │
+│  M  src/util.go      │ +++ b/src/main.go         │
+│  A  src/new.go       │ @@ -10,3 +10,5 @@        │
+├─────── Log ──────────┤ +func newHelper() {       │
+│  r42  alice  05-08   │ +    return nil            │
+│  r41  bob    05-07   │ +}                         │
+├──────────────────────┴───────────────────────────┤
+│ j/k:nav ^u/^d:scroll Space:mark c:commit q:quit │
+└──────────────────────────────────────────────────┘
+```
 
 ## Key Bindings
 
@@ -49,65 +76,64 @@ From Vim: `:LazySvn` or `<Leader>s`.
 |---|---|
 | `j` / `k` | Move cursor down / up |
 | `g` / `G` | Jump to first / last item |
-| `Tab` / `Shift-Tab` | Switch focus between panels |
+| `Ctrl-U` / `Ctrl-D` | Scroll preview half-page up / down |
+| `Tab` / `Shift-Tab` | Switch focus between Files and Log panels |
 
 ### File Operations (Files panel)
 
 | Key | Action |
 |---|---|
 | `Space` | Toggle mark on current file |
-| `c` | Commit marked/current file(s) via `$EDITOR` |
-| `r` | Revert marked/current file(s) (confirm) |
-| `a` | Add untracked file(s) |
-| `x` | Delete file(s) (confirm) |
+| `c` | Commit marked/current file(s) |
+| `r` | Revert marked/current file(s) (with confirmation) |
+| `a` | Add untracked file(s) to version control |
+| `x` | Delete file(s) (with confirmation) |
 | `m` | Mark conflict as resolved |
 
 ### Global
 
 | Key | Action |
 |---|---|
-| `u` | SVN update (with progress indicator) |
+| `u` | Run `svn update` (with progress indicator) |
 | `R` | Refresh all panels |
 | `q` | Quit |
 
-## Layout
+## Vim Integration
 
-```
-+---------------------+----------------------------+
-|   Files             |                            |
-|   M  src/foo.sv     |     Preview (diff)         |
-|   A  src/bar.sv     |     +line                  |
-+---------------------+     -line                  |
-|   Log               |                            |
-|   r42 alice 05-08   |                            |
-+---------------------+----------------------------+
-| c:commit r:revert a:add x:delete Space:mark q:quit |
-+----------------------------------------------------+
+An optional Vim plugin lets you launch lazysvn in a terminal buffer without leaving your editor.
+
+### Install the plugin
+
+With [vim-plug](https://github.com/junegunn/vim-plug):
+
+```vim
+Plug 'maiyangzhan/lazysvn', { 'rtp': 'vim-plugin' }
 ```
 
-## Nested Vim
-
-When launched from inside Vim via `:LazySvn`, the plugin sets `$VIM_SERVERNAME`.
-Pressing `c` (commit) will open the commit message in your host Vim instance
-via `--remote-wait-silent`, avoiding a nested Vim.
-
-## Configuration
-
-| Vim variable | Default | Description |
-|---|---|---|
-| `g:lazysvn_cmd` | `"lazysvn"` | Path to the binary |
-| `g:lazysvn_no_default_mapping` | (unset) | Set to disable `<Leader>s` |
-
-## Build from Source
-
-Requires Go 1.22+.
+Or manually:
 
 ```bash
-make build    # macOS binary
-make linux    # Linux x86_64 static binary
-make test     # run tests
-make clean    # remove build artifacts
+cp -r vim-plugin/* ~/.vim/
 ```
+
+### Usage
+
+- `:LazySvn` or `<Leader>s` to open
+- Uses a floating popup on Vim 8.2+, falls back to a new tab on older versions
+- Automatically closes when lazysvn exits
+
+### Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `g:lazysvn_cmd` | `"lazysvn"` | Path to the lazysvn binary |
+| `g:lazysvn_no_default_mapping` | (unset) | Set to `1` to disable the `<Leader>s` mapping |
+
+## Requirements
+
+- **Runtime:** `svn` command-line client on `$PATH`
+- **Build:** Go 1.22+
+- **Platform:** Linux x86_64 (prebuilt), macOS (build from source)
 
 ## License
 

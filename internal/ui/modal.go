@@ -42,7 +42,7 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onSubmit func(ms
 	hint := tview.NewTextView()
 	hint.SetDynamicColors(true)
 	hint.SetTextAlign(tview.AlignCenter)
-	hint.SetText("[yellow]Ctrl+S[white]: submit  [yellow]Esc[white]: cancel")
+	hint.SetText("[yellow]Enter[white]: submit  [yellow]Esc[white]: cancel")
 	hint.SetBackgroundColor(tcell.ColorDarkSlateGray)
 
 	frame := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -63,7 +63,7 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onSubmit func(ms
 		AddItem(nil, 0, 1, false)
 
 	textArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyCtrlS {
+		if event.Key() == tcell.KeyEnter {
 			msg := strings.TrimSpace(textArea.GetText())
 			app.SetRoot(root, true)
 			if msg != "" {

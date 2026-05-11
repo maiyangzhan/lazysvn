@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/maiyangzhan/lazysvn/internal/editor"
 	"github.com/maiyangzhan/lazysvn/internal/logfile"
 	"github.com/maiyangzhan/lazysvn/internal/svn"
 )
@@ -27,6 +28,7 @@ type App struct {
 	logLimit    int
 	modalActive bool
 	debounce    debouncer
+	diffs       *diffCache
 }
 
 type focusable interface {
@@ -59,6 +61,7 @@ func NewApp(client *svn.Client, logLimit int) *App {
 		preview:  NewPreviewPanel(),
 		hints:    NewHintBar(tapp),
 		logLimit: logLimit,
+		diffs:    newDiffCache(),
 	}
 	a.panels = []focusable{a.files, a.log}
 	a.wireCallbacks()
@@ -67,31 +70,37 @@ func NewApp(client *svn.Client, logLimit int) *App {
 
 func (a *App) wireCallbacks() {
 	a.files.OnSelect = func(entry svn.FileEntry) {
+		if cached, ok := a.diffs.getFile(entry.Path); ok {
+			a.preview.SetContent(diffOrEmpty(cached))
+			return
+		}
 		a.debounce.Do(100*time.Millisecond, func() {
 			diff, err := a.client.Diff(entry.Path)
 			a.app.QueueUpdateDraw(func() {
 				if err != nil {
 					a.preview.SetContent("Error: " + err.Error())
-				} else if diff == "" {
-					a.preview.SetContent("(no changes)")
-				} else {
-					a.preview.SetContent(diff)
+					return
 				}
+				a.diffs.setFile(entry.Path, diff)
+				a.preview.SetContent(diffOrEmpty(diff))
 			})
 		})
 	}
 
 	a.log.OnSelect = func(entry svn.LogEntry) {
+		if cached, ok := a.diffs.getRev(entry.Revision); ok {
+			a.preview.SetContent(diffOrEmpty(cached))
+			return
+		}
 		a.debounce.Do(100*time.Millisecond, func() {
 			diff, err := a.client.DiffRevision(entry.Revision)
 			a.app.QueueUpdateDraw(func() {
 				if err != nil {
 					a.preview.SetContent("Error: " + err.Error())
-				} else if diff == "" {
-					a.preview.SetContent("(no changes)")
-				} else {
-					a.preview.SetContent(diff)
+					return
 				}
+				a.diffs.setRev(entry.Revision, diff)
+				a.preview.SetContent(diffOrEmpty(diff))
 			})
 		})
 	}
@@ -108,8 +117,26 @@ func (a *App) wireCallbacks() {
 			a.doRemove()
 		case 'm':
 			a.doResolved()
+		case 'e':
+			a.doEdit()
 		}
 	}
+}
+
+func (a *App) runOp(spinner, opName string, op func() error, onSuccess func()) {
+	dismiss := ShowSpinner(a.app, a.root, spinner)
+	go func() {
+		err := op()
+		dismiss()
+		if err != nil {
+			a.reportError(opName, err)
+			return
+		}
+		if onSuccess != nil {
+			a.app.QueueUpdateDraw(onSuccess)
+		}
+		a.refreshAsync()
+	}()
 }
 
 func (a *App) doCommit() {
@@ -125,13 +152,12 @@ func (a *App) doCommit() {
 		if cancelled || msg == "" {
 			return
 		}
-		if err := a.client.Commit(paths, msg); err != nil {
-			a.reportError("commit", err)
-			return
-		}
-		a.files.ClearMarks()
-		a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
-		a.refreshAsync()
+		a.runOp("Committing...", "commit",
+			func() error { return a.client.Commit(paths, msg) },
+			func() {
+				a.files.ClearMarks()
+				a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
+			})
 	})
 }
 
@@ -148,13 +174,12 @@ func (a *App) doRevert() {
 		if !yes {
 			return
 		}
-		if err := a.client.Revert(paths); err != nil {
-			a.reportError("revert", err)
-			return
-		}
-		a.files.ClearMarks()
-		a.hints.ShowInfo(fmt.Sprintf("Reverted %d file(s)", len(paths)))
-		a.refreshAsync()
+		a.runOp("Reverting...", "revert",
+			func() error { return a.client.Revert(paths) },
+			func() {
+				a.files.ClearMarks()
+				a.hints.ShowInfo(fmt.Sprintf("Reverted %d file(s)", len(paths)))
+			})
 	})
 }
 
@@ -164,13 +189,12 @@ func (a *App) doAdd() {
 		return
 	}
 	paths := entriesToPaths(targets)
-	if err := a.client.Add(paths); err != nil {
-		a.reportError("add", err)
-		return
-	}
-	a.files.ClearMarks()
-	a.hints.ShowInfo(fmt.Sprintf("Added %d file(s)", len(paths)))
-	a.refreshAsync()
+	a.runOp("Adding...", "add",
+		func() error { return a.client.Add(paths) },
+		func() {
+			a.files.ClearMarks()
+			a.hints.ShowInfo(fmt.Sprintf("Added %d file(s)", len(paths)))
+		})
 }
 
 func (a *App) doRemove() {
@@ -186,13 +210,12 @@ func (a *App) doRemove() {
 		if !yes {
 			return
 		}
-		if err := a.client.Remove(paths); err != nil {
-			a.reportError("remove", err)
-			return
-		}
-		a.files.ClearMarks()
-		a.hints.ShowInfo(fmt.Sprintf("Removed %d file(s)", len(paths)))
-		a.refreshAsync()
+		a.runOp("Removing...", "remove",
+			func() error { return a.client.Remove(paths) },
+			func() {
+				a.files.ClearMarks()
+				a.hints.ShowInfo(fmt.Sprintf("Removed %d file(s)", len(paths)))
+			})
 	})
 }
 
@@ -202,30 +225,51 @@ func (a *App) doResolved() {
 		return
 	}
 	paths := entriesToPaths(targets)
-	if err := a.client.Resolved(paths); err != nil {
-		a.reportError("resolved", err)
+	a.modalActive = true
+	ResolvePrompt(a.app, a.root, len(paths), func(mode string) {
+		a.modalActive = false
+		if mode == "" {
+			return
+		}
+		a.runOp(fmt.Sprintf("Resolving (%s)...", mode), "resolve",
+			func() error { return a.client.Resolve(paths, mode) },
+			func() {
+				a.files.ClearMarks()
+				a.hints.ShowInfo(fmt.Sprintf("Resolved %d file(s) with --accept=%s", len(paths), mode))
+			})
+	})
+}
+
+func (a *App) doEdit() {
+	entry := a.files.SelectedEntry()
+	if entry == nil {
 		return
 	}
-	a.files.ClearMarks()
-	a.hints.ShowInfo(fmt.Sprintf("Resolved %d file(s)", len(paths)))
+	path := entry.Path
+	if err := editor.Launch(a.app, path); err != nil {
+		a.reportError("edit", err)
+		return
+	}
+	// File content may have changed; drop its cached diff and refresh.
+	a.diffs.clearFiles()
 	a.refreshAsync()
 }
 
 func (a *App) doUpdate() {
-	dismiss := ShowSpinner(a.app, a.root, "Updating...")
-	go func() {
-		summary, err := a.client.Update()
-		dismiss()
-		if err != nil {
-			a.reportError("update", err)
-			return
-		}
-		a.app.QueueUpdateDraw(func() {
+	var summary svn.UpdateSummary
+	a.runOp("Updating...", "update",
+		func() error {
+			s, err := a.client.Update()
+			if err != nil {
+				return err
+			}
+			summary = s
+			return nil
+		},
+		func() {
 			a.hints.ShowInfo(fmt.Sprintf("Updated to r%d (%d updated, %d added, %d deleted)",
 				summary.Revision, summary.Updated, summary.Added, summary.Deleted))
 		})
-		a.refreshAsync()
-	}()
 }
 
 func (a *App) reportError(op string, err error) {
@@ -246,7 +290,8 @@ func (a *App) updateHints() {
 			{Key: "r", Label: "revert"},
 			{Key: "a", Label: "add"},
 			{Key: "x", Label: "delete"},
-			{Key: "m", Label: "resolved"},
+			{Key: "e", Label: "edit"},
+			{Key: "m", Label: "resolve"},
 			{Key: "u", Label: "update"},
 			{Key: "R", Label: "refresh"},
 			{Key: "q", Label: "quit"},
@@ -346,12 +391,15 @@ func (a *App) refreshAsync() {
 	go func() {
 		entries, err := a.client.Status()
 		if err != nil {
+			a.reportError("status", err)
 			return
 		}
 		logs, err := a.client.Log(a.logLimit)
 		if err != nil {
+			a.reportError("log", err)
 			return
 		}
+		a.diffs.clearFiles()
 		a.app.QueueUpdateDraw(func() {
 			a.files.SetEntries(entries)
 			a.log.SetEntries(logs)
@@ -365,4 +413,11 @@ func entriesToPaths(entries []svn.FileEntry) []string {
 		paths[i] = e.Path
 	}
 	return paths
+}
+
+func diffOrEmpty(diff string) string {
+	if diff == "" {
+		return "(no changes)"
+	}
+	return diff
 }

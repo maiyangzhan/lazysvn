@@ -44,7 +44,7 @@ func NewFilesPanel() *FilesPanel {
 		case ' ':
 			p.ToggleMark()
 			return nil
-		case 'c', 'r', 'a', 'x', 'm':
+		case 'c', 'r', 'a', 'x', 'm', 'e':
 			if p.OnAction != nil {
 				p.OnAction(event.Rune())
 			}
@@ -113,8 +113,12 @@ func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
 		}
 		return entries[i].Path < entries[j].Path
 	})
+	curPath := ""
+	if prev := p.SelectedEntry(); prev != nil {
+		curPath = prev.Path
+	}
+	prevIdx := p.list.GetCurrentItem()
 	p.entries = entries
-	cur := p.list.GetCurrentItem()
 	p.list.Clear()
 	// prune marks for entries that no longer exist
 	valid := map[string]bool{}
@@ -134,11 +138,23 @@ func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
 		label := fmt.Sprintf("%s [%s]%s[-]  %s", mark, statusColor(e.Status), statusLetter(e.Status), e.Path)
 		p.list.AddItem(label, "", 0, nil)
 	}
-	if cur >= p.list.GetItemCount() {
-		cur = p.list.GetItemCount() - 1
+	newIdx := -1
+	if curPath != "" {
+		for i, e := range entries {
+			if e.Path == curPath {
+				newIdx = i
+				break
+			}
+		}
 	}
-	if cur >= 0 {
-		p.list.SetCurrentItem(cur)
+	if newIdx < 0 {
+		newIdx = prevIdx
+		if newIdx >= len(entries) {
+			newIdx = len(entries) - 1
+		}
+	}
+	if newIdx >= 0 {
+		p.list.SetCurrentItem(newIdx)
 	}
 }
 

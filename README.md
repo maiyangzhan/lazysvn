@@ -12,11 +12,14 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 
 - **Three-panel layout** — file status, commit log, and diff preview side by side
 - **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl-U`/`Ctrl-D` for preview scrolling
-- **File operations** — commit, revert, add, delete, mark resolved, all with single-key shortcuts
+- **File operations** — commit, revert, add, delete, all with single-key shortcuts
 - **Multi-select** — `Space` to mark multiple files for batch operations
-- **Live diff preview** — auto-updates as you navigate, with syntax coloring
+- **Live diff preview** — auto-updates as you navigate, with syntax coloring and per-path caching
+- **Conflict resolution** — pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` from a modal when resolving
+- **In-app editor launch** — `e` opens `$EDITOR` on the current file (honors `VIM_SERVERNAME`); UI returns and refreshes automatically
+- **Non-blocking writes** — commits, reverts, updates run in the background with a spinner, never freezing the TUI
 - **SVN update** — `u` to update with a progress indicator
-- **Status grouping** — files grouped by status (Conflicted > Modified > Added > Deleted > Untracked)
+- **Status grouping** — files grouped by status (Conflicted > Modified > Added > Deleted > Untracked); selection preserved by path across refresh
 - **Vim integration** — optional `:LazySvn` command to launch from inside Vim
 - **Offline-friendly** — single static binary, just `scp` to your server and run
 
@@ -88,7 +91,8 @@ lazysvn --log-limit 100     # show more log entries (default: 50)
 | `r` | Revert marked/current file(s) (with confirmation) |
 | `a` | Add untracked file(s) to version control |
 | `x` | Delete file(s) (with confirmation) |
-| `m` | Mark conflict as resolved |
+| `e` | Open current file in `$EDITOR` (or `vi`); honors `VIM_SERVERNAME` |
+| `m` | Resolve conflict(s): pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` / mark resolved |
 
 ### Global
 

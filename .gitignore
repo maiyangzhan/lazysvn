@@ -2,7 +2,6 @@
 dist/
 docs/
 testdata/
-*_test.go
 *.test
 *.out
 .DS_Store

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -31,6 +32,42 @@ func ShowSpinner(app *tview.Application, root tview.Primitive, message string) f
 			app.SetRoot(root, true)
 		})
 	}
+}
+
+// ResolvePrompt shows a modal asking the user how to resolve conflict(s)
+// on the selected file(s). onDone receives the svn --accept mode (empty
+// string means cancelled).
+func ResolvePrompt(app *tview.Application, root tview.Primitive, count int, onDone func(mode string)) {
+	labels := []string{
+		"Mark resolved (working)",
+		"Mine (conflict hunks)",
+		"Theirs (conflict hunks)",
+		"Mine (full file)",
+		"Theirs (full file)",
+		"Cancel",
+	}
+	modes := []string{
+		"working",
+		"mine-conflict",
+		"theirs-conflict",
+		"mine-full",
+		"theirs-full",
+		"",
+	}
+	text := fmt.Sprintf("Resolve %d file(s) — pick strategy:", count)
+	modal := tview.NewModal().
+		SetText(text).
+		AddButtons(labels).
+		SetDoneFunc(func(idx int, _ string) {
+			app.SetRoot(root, true)
+			if idx < 0 || idx >= len(modes) {
+				onDone("")
+				return
+			}
+			onDone(modes[idx])
+		})
+	modal.SetBackgroundColor(tcell.ColorDarkSlateGray)
+	app.SetRoot(modal, true)
 }
 
 func CommitPrompt(app *tview.Application, root tview.Primitive, onDone func(msg string, cancelled bool)) {

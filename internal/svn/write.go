@@ -31,7 +31,14 @@ func (c *Client) Remove(paths []string) error {
 }
 
 func (c *Client) Resolved(paths []string) error {
-	args := append([]string{"resolved"}, paths...)
+	return c.Resolve(paths, "working")
+}
+
+// Resolve runs `svn resolve --accept=<mode>` on the given paths. Valid modes
+// are the same as svn's --accept flag: working, base, mine-conflict,
+// theirs-conflict, mine-full, theirs-full.
+func (c *Client) Resolve(paths []string, mode string) error {
+	args := append([]string{"resolve", "--accept", mode}, paths...)
 	_, err := c.run(args...)
 	return err
 }

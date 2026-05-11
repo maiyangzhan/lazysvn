@@ -5,8 +5,9 @@ A [lazygit](https://github.com/jesseduffield/lazygit)-style terminal UI for Subv
 Browse file status, view diffs, commit, revert, and update — all without leaving the terminal. Ships as a single static binary with zero dependencies beyond `svn` itself.
 
 ![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-Linux%20x86__64-lightgrey)
+![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-blue)
+[![ci](https://github.com/maiyangzhan/lazysvn/actions/workflows/ci.yml/badge.svg)](https://github.com/maiyangzhan/lazysvn/actions/workflows/ci.yml)
 
 ## Features
 
@@ -14,12 +15,16 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 - **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl-U`/`Ctrl-D` for preview scrolling
 - **File operations** — commit, revert, add, delete, all with single-key shortcuts
 - **Multi-select** — `Space` to mark multiple files for batch operations
+- **File filter** — `/` filters the file panel by path substring
+- **Single-file log drill-down** — `L` on a file shows only its history; `M` loads more older entries
 - **Live diff preview** — auto-updates as you navigate, with syntax coloring and per-path caching
 - **Conflict resolution** — pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` from a modal when resolving
 - **In-app editor launch** — `e` opens `$EDITOR` on the current file (honors `VIM_SERVERNAME`); UI returns and refreshes automatically
+- **Multi-line commit** — `c` for a quick one-liner, `C` to compose in `$EDITOR`
 - **Non-blocking writes** — commits, reverts, updates run in the background with a spinner, never freezing the TUI
-- **SVN update** — `u` to update with a progress indicator
+- **SVN update** — `u` to update with a progress indicator; warns when conflicts are produced
 - **Status grouping** — files grouped by status (Conflicted > Modified > Added > Deleted > Untracked); selection preserved by path across refresh
+- **Built-in help** — `?` shows the full keybinding reference
 - **Vim integration** — optional `:LazySvn` command to launch from inside Vim
 - **Offline-friendly** — single static binary, just `scp` to your server and run
 
@@ -27,13 +32,23 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 
 ### Download prebuilt binary
 
-Grab the latest release from the [Releases](https://github.com/maiyangzhan/lazysvn/releases) page:
+Grab the latest release from the [Releases](https://github.com/maiyangzhan/lazysvn/releases) page. Prebuilt binaries are published for:
+
+| OS | Arch | Asset |
+|---|---|---|
+| Linux | x86_64 | `lazysvn-linux-amd64` |
+| Linux | arm64  | `lazysvn-linux-arm64` |
+| macOS | Intel  | `lazysvn-darwin-amd64` |
+| macOS | Apple Silicon | `lazysvn-darwin-arm64` |
 
 ```bash
+# pick the asset that matches your platform
 curl -LO https://github.com/maiyangzhan/lazysvn/releases/latest/download/lazysvn-linux-amd64
 chmod +x lazysvn-linux-amd64
 sudo mv lazysvn-linux-amd64 /usr/local/bin/lazysvn
 ```
+
+Each asset has a matching `.sha256` file for integrity verification.
 
 ### Build from source
 
@@ -53,7 +68,8 @@ The output binary is at `dist/lazysvn-linux-amd64` (cross-compiled) or `./lazysv
 ```bash
 lazysvn                     # run in current SVN working copy
 lazysvn --cwd /path/to/wc   # specify a different working copy
-lazysvn --log-limit 100     # show more log entries (default: 50)
+lazysvn --log-limit 100     # initial log entry count (default: 50; M loads more)
+lazysvn --version           # print version and exit
 ```
 
 ## Layout
@@ -87,19 +103,30 @@ lazysvn --log-limit 100     # show more log entries (default: 50)
 | Key | Action |
 |---|---|
 | `Space` | Toggle mark on current file |
-| `c` | Commit marked/current file(s) |
+| `/` | Filter files by path substring (empty input clears filter) |
+| `c` | Commit marked/current file(s) — single-line prompt |
+| `C` | Commit via `$EDITOR` — multi-line message |
 | `r` | Revert marked/current file(s) (with confirmation) |
 | `a` | Add untracked file(s) to version control |
 | `x` | Delete file(s) (with confirmation) |
 | `e` | Open current file in `$EDITOR` (or `vi`); honors `VIM_SERVERNAME` |
 | `m` | Resolve conflict(s): pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` / mark resolved |
+| `L` | Toggle single-file log for the current item (filters the Log panel) |
+
+### Log panel
+
+| Key | Action |
+|---|---|
+| `M` | Load more older log entries |
+| `Esc` | Exit single-file log mode (return to repo-wide log) |
 
 ### Global
 
 | Key | Action |
 |---|---|
-| `u` | Run `svn update` (with progress indicator) |
+| `u` | Run `svn update` (spinner; warns if conflicts are produced) |
 | `R` | Refresh all panels |
+| `?` | Show the full keybinding help |
 | `q` | Quit |
 
 ## Vim Integration
@@ -137,7 +164,7 @@ cp -r vim-plugin/* ~/.vim/
 
 - **Runtime:** `svn` command-line client on `$PATH`
 - **Build:** Go 1.22+
-- **Platform:** Linux x86_64 (prebuilt), macOS (build from source)
+- **Platform:** Linux (x86_64, arm64) and macOS (Intel, Apple Silicon); prebuilt binaries provided for all four
 
 ## License
 

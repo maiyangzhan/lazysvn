@@ -8,7 +8,10 @@ U    src/foo.go
 U    src/bar.go
 A    src/new.go
 D    src/old.go
+C    src/conflict.go
 Updated to revision 45.
+Summary of conflicts:
+  Text conflicts: 1
 `)
 	s, err := parseUpdate(out)
 	if err != nil {
@@ -25,6 +28,9 @@ Updated to revision 45.
 	}
 	if s.Deleted != 1 {
 		t.Errorf("Deleted = %d, want 1", s.Deleted)
+	}
+	if s.Conflicted != 1 {
+		t.Errorf("Conflicted = %d, want 1", s.Conflicted)
 	}
 	if s.Raw != string(out) {
 		t.Errorf("Raw not preserved")

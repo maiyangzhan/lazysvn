@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -12,7 +13,9 @@ import (
 
 type FilesPanel struct {
 	list     *tview.List
-	entries  []svn.FileEntry
+	all      []svn.FileEntry // full sorted list
+	entries  []svn.FileEntry // filtered view actually displayed
+	filter   string          // lowercase substring, empty = no filter
 	marks    map[string]bool
 	OnSelect func(entry svn.FileEntry)
 	OnAction func(key rune)
@@ -44,7 +47,7 @@ func NewFilesPanel() *FilesPanel {
 		case ' ':
 			p.ToggleMark()
 			return nil
-		case 'c', 'r', 'a', 'x', 'm', 'e':
+		case '/', 'c', 'C', 'r', 'a', 'x', 'm', 'e', 'L':
 			if p.OnAction != nil {
 				p.OnAction(event.Rune())
 			}
@@ -60,6 +63,17 @@ func (p *FilesPanel) View() tview.Primitive {
 	return p.list
 }
 
+func (p *FilesPanel) Filter() string {
+	return p.filter
+}
+
+// SetFilter applies a case-insensitive substring filter on Path. Empty
+// string clears the filter.
+func (p *FilesPanel) SetFilter(s string) {
+	p.filter = strings.ToLower(strings.TrimSpace(s))
+	p.render()
+}
+
 func (p *FilesPanel) ToggleMark() {
 	idx := p.list.GetCurrentItem()
 	if idx < 0 || idx >= len(p.entries) {
@@ -72,7 +86,6 @@ func (p *FilesPanel) ToggleMark() {
 		p.marks[path] = true
 	}
 	p.renderItem(idx)
-	// move cursor down after toggling
 	if idx+1 < len(p.entries) {
 		p.list.SetCurrentItem(idx + 1)
 	}
@@ -89,6 +102,8 @@ func (p *FilesPanel) HasMarks() bool {
 	return len(p.marks) > 0
 }
 
+// MarkedOrCurrent returns marked entries (if any), else the current one.
+// Only visible (filter-matching) entries are considered.
 func (p *FilesPanel) MarkedOrCurrent() []svn.FileEntry {
 	if len(p.marks) > 0 {
 		var result []svn.FileEntry
@@ -97,7 +112,9 @@ func (p *FilesPanel) MarkedOrCurrent() []svn.FileEntry {
 				result = append(result, e)
 			}
 		}
-		return result
+		if len(result) > 0 {
+			return result
+		}
 	}
 	if e := p.SelectedEntry(); e != nil {
 		return []svn.FileEntry{*e}
@@ -113,13 +130,7 @@ func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
 		}
 		return entries[i].Path < entries[j].Path
 	})
-	curPath := ""
-	if prev := p.SelectedEntry(); prev != nil {
-		curPath = prev.Path
-	}
-	prevIdx := p.list.GetCurrentItem()
-	p.entries = entries
-	p.list.Clear()
+	p.all = entries
 	// prune marks for entries that no longer exist
 	valid := map[string]bool{}
 	for _, e := range entries {
@@ -130,17 +141,42 @@ func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
 			delete(p.marks, path)
 		}
 	}
-	for _, e := range entries {
-		mark := " "
-		if p.marks[e.Path] {
-			mark = "◆"
-		}
-		label := fmt.Sprintf("%s [%s]%s[-]  %s", mark, statusColor(e.Status), statusLetter(e.Status), e.Path)
-		p.list.AddItem(label, "", 0, nil)
+	p.render()
+}
+
+func (p *FilesPanel) render() {
+	curPath := ""
+	if prev := p.SelectedEntry(); prev != nil {
+		curPath = prev.Path
 	}
+	prevIdx := p.list.GetCurrentItem()
+
+	if p.filter == "" {
+		p.entries = p.all
+	} else {
+		filtered := make([]svn.FileEntry, 0, len(p.all))
+		for _, e := range p.all {
+			if strings.Contains(strings.ToLower(e.Path), p.filter) {
+				filtered = append(filtered, e)
+			}
+		}
+		p.entries = filtered
+	}
+
+	p.list.Clear()
+	for _, e := range p.entries {
+		p.list.AddItem(p.formatLabel(e), "", 0, nil)
+	}
+
+	if p.filter == "" {
+		p.list.SetTitle(" Files ")
+	} else {
+		p.list.SetTitle(fmt.Sprintf(" Files (%d/%d, filter: %q) ", len(p.entries), len(p.all), p.filter))
+	}
+
 	newIdx := -1
 	if curPath != "" {
-		for i, e := range entries {
+		for i, e := range p.entries {
 			if e.Path == curPath {
 				newIdx = i
 				break
@@ -149,8 +185,8 @@ func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
 	}
 	if newIdx < 0 {
 		newIdx = prevIdx
-		if newIdx >= len(entries) {
-			newIdx = len(entries) - 1
+		if newIdx >= len(p.entries) {
+			newIdx = len(p.entries) - 1
 		}
 	}
 	if newIdx >= 0 {
@@ -158,17 +194,19 @@ func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
 	}
 }
 
-func (p *FilesPanel) renderItem(idx int) {
-	if idx < 0 || idx >= len(p.entries) {
-		return
-	}
-	e := p.entries[idx]
+func (p *FilesPanel) formatLabel(e svn.FileEntry) string {
 	mark := " "
 	if p.marks[e.Path] {
 		mark = "◆"
 	}
-	label := fmt.Sprintf("%s [%s]%s[-]  %s", mark, statusColor(e.Status), statusLetter(e.Status), e.Path)
-	p.list.SetItemText(idx, label, "")
+	return fmt.Sprintf("%s [%s]%s[-]  %s", mark, statusColor(e.Status), statusLetter(e.Status), e.Path)
+}
+
+func (p *FilesPanel) renderItem(idx int) {
+	if idx < 0 || idx >= len(p.entries) {
+		return
+	}
+	p.list.SetItemText(idx, p.formatLabel(p.entries[idx]), "")
 }
 
 func (p *FilesPanel) SelectedEntry() *svn.FileEntry {

@@ -10,11 +10,12 @@ import (
 )
 
 type UpdateSummary struct {
-	Revision int64
-	Updated  int
-	Added    int
-	Deleted  int
-	Raw      string
+	Revision   int64
+	Updated    int
+	Added      int
+	Deleted    int
+	Conflicted int
+	Raw        string
 }
 
 var revRegexp = regexp.MustCompile(`revision (\d+)`)
@@ -37,6 +38,8 @@ func parseUpdate(data []byte) (UpdateSummary, error) {
 				s.Added++
 			case 'D':
 				s.Deleted++
+			case 'C':
+				s.Conflicted++
 			}
 		}
 		if strings.Contains(line, "revision ") {

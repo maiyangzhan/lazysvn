@@ -79,7 +79,7 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onDone func(msg 
 	hint := tview.NewTextView()
 	hint.SetDynamicColors(true)
 	hint.SetTextAlign(tview.AlignCenter)
-	hint.SetText("[yellow]Enter[white]: submit  [yellow]Esc[white]: cancel")
+	hint.SetText("[yellow]Enter[white]: submit  [yellow]Esc[white]: cancel  [grey](C for $EDITOR)[-]")
 	hint.SetBackgroundColor(tcell.ColorDarkSlateGray)
 
 	frame := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -106,6 +106,130 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onDone func(msg 
 			msg := strings.TrimSpace(input.GetText())
 			app.SetRoot(root, true)
 			onDone(msg, false)
+			return
+		}
+		if key == tcell.KeyEscape {
+			app.SetRoot(root, true)
+			onDone("", true)
+		}
+	})
+
+	app.SetRoot(wrapper, true)
+	app.SetFocus(input)
+}
+
+// HelpModal shows a full keybinding reference. Calls onClose when
+// dismissed (Esc / ? / q). Caller is responsible for tracking modalActive.
+func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
+	const content = `[yellow::b]Navigation[-::-]
+  j / k              move cursor down / up
+  g / G              jump to first / last item
+  Ctrl-U / Ctrl-D    scroll preview half-page up / down
+  Tab / Shift-Tab    switch between Files and Log panels
+
+[yellow::b]Files panel[-::-]
+  Space              toggle mark on current file
+  /                  filter files by path substring
+  c                  commit (single-line prompt)
+  C                  commit via $EDITOR (multi-line)
+  r                  revert (with confirmation)
+  a                  add untracked to version control
+  x                  delete (with confirmation)
+  e                  open current file in $EDITOR
+  m                  resolve conflict(s): mine / theirs / mark
+  L                  single-file log for current item (toggle)
+
+[yellow::b]Log panel[-::-]
+  M                  load more older entries
+  Esc                exit single-file log mode
+
+[yellow::b]Global[-::-]
+  u                  svn update (spinner; warns on conflicts)
+  R                  refresh status + log
+  ?                  show this help
+  q                  quit
+
+[grey]Press Esc, ? or q to close[-]`
+
+	tv := tview.NewTextView()
+	tv.SetDynamicColors(true)
+	tv.SetScrollable(true)
+	tv.SetWrap(false)
+	tv.SetText(content)
+	tv.SetBackgroundColor(tcell.ColorDarkSlateGray)
+	tv.SetBorder(true)
+	tv.SetTitle(" Help ")
+	tv.SetTitleColor(tcell.ColorYellow)
+	tv.SetBorderColor(tcell.ColorBlue)
+
+	close := func() {
+		app.SetRoot(root, true)
+		if onClose != nil {
+			onClose()
+		}
+	}
+
+	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape || event.Rune() == '?' || event.Rune() == 'q' {
+			close()
+			return nil
+		}
+		return event
+	})
+
+	wrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tv, 64, 0, true).
+			AddItem(nil, 0, 1, false),
+			28, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	app.SetRoot(wrapper, true)
+	app.SetFocus(tv)
+}
+
+// FilterPrompt asks for a substring to filter the files panel by path.
+// Empty pattern means clear filter. onDone receives the trimmed pattern
+// and whether the user cancelled via Esc.
+func FilterPrompt(app *tview.Application, root tview.Primitive, initial string, onDone func(pattern string, cancelled bool)) {
+	input := tview.NewInputField()
+	input.SetLabel("Filter: ")
+	input.SetFieldWidth(46)
+	input.SetLabelColor(tcell.ColorYellow)
+	input.SetText(initial)
+
+	hint := tview.NewTextView()
+	hint.SetDynamicColors(true)
+	hint.SetTextAlign(tview.AlignCenter)
+	hint.SetText("[yellow]Enter[white]: apply  [yellow]Esc[white]: cancel  [grey](empty = clear)[-]")
+	hint.SetBackgroundColor(tcell.ColorDarkSlateGray)
+
+	frame := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(input, 1, 0, true).
+		AddItem(nil, 0, 1, false).
+		AddItem(hint, 1, 0, false)
+	frame.SetBorder(true)
+	frame.SetTitle(" Filter Files ")
+	frame.SetTitleColor(tcell.ColorYellow)
+	frame.SetBorderColor(tcell.ColorBlue)
+
+	wrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(frame, 60, 0, true).
+			AddItem(nil, 0, 1, false),
+			6, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	input.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			p := strings.TrimSpace(input.GetText())
+			app.SetRoot(root, true)
+			onDone(p, false)
 			return
 		}
 		if key == tcell.KeyEscape {

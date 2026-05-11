@@ -62,3 +62,39 @@ func (c *Client) Log(limit int) ([]LogEntry, error) {
 	}
 	return parseLog(out)
 }
+
+// LogBefore returns up to `limit` entries strictly older than `before`.
+// Used for pagination (load-more). Returns nil when nothing precedes.
+func (c *Client) LogBefore(before int64, limit int) ([]LogEntry, error) {
+	if before <= 1 {
+		return nil, nil
+	}
+	out, err := c.run("log", "--xml", "--limit", strconv.Itoa(limit),
+		"-r", strconv.FormatInt(before-1, 10)+":0")
+	if err != nil {
+		return nil, err
+	}
+	return parseLog(out)
+}
+
+// LogPath returns up to `limit` entries that touched `path`, newest first.
+func (c *Client) LogPath(path string, limit int) ([]LogEntry, error) {
+	out, err := c.run("log", "--xml", "--limit", strconv.Itoa(limit), "-r", "HEAD:0", path)
+	if err != nil {
+		return nil, err
+	}
+	return parseLog(out)
+}
+
+// LogPathBefore is the path-filtered equivalent of LogBefore.
+func (c *Client) LogPathBefore(path string, before int64, limit int) ([]LogEntry, error) {
+	if before <= 1 {
+		return nil, nil
+	}
+	out, err := c.run("log", "--xml", "--limit", strconv.Itoa(limit),
+		"-r", strconv.FormatInt(before-1, 10)+":0", path)
+	if err != nil {
+		return nil, err
+	}
+	return parseLog(out)
+}

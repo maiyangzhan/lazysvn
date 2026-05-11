@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux,  goarch: amd64 }
+          - { goos: linux,  goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist
+          out="dist/lazysvn-${GOOS}-${GOARCH}"
+          go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o "$out" ./cmd/lazysvn
+          sha256sum "$out" > "${out}.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lazysvn-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/lazysvn-${{ matrix.goos }}-${{ matrix.goarch }}
+            dist/lazysvn-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # If a release for this tag already exists (e.g. pre-created with
+        # custom notes), upload to it; otherwise create one with auto-generated
+        # notes. Uploads use --clobber so reruns are idempotent.
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/lazysvn-* --clobber

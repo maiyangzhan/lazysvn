@@ -109,6 +109,8 @@ func (a *App) wireCallbacks() {
 		switch key {
 		case 'c':
 			a.doCommit()
+		case 'C':
+			a.doCommitEditor()
 		case 'r':
 			a.doRevert()
 		case 'a':
@@ -119,7 +121,18 @@ func (a *App) wireCallbacks() {
 			a.doResolved()
 		case 'e':
 			a.doEdit()
+		case 'L':
+			a.doFileLog()
+		case '/':
+			a.doFilter()
 		}
+	}
+
+	a.log.OnLoadMore = func() {
+		a.doLoadMoreLog()
+	}
+	a.log.OnTogglePath = func() {
+		a.doFileLogExit()
 	}
 }
 
@@ -159,6 +172,29 @@ func (a *App) doCommit() {
 				a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
 			})
 	})
+}
+
+func (a *App) doCommitEditor() {
+	targets := a.files.MarkedOrCurrent()
+	if len(targets) == 0 {
+		return
+	}
+	paths := entriesToPaths(targets)
+	msg, err := editor.ForCommit(a.app)
+	if err != nil {
+		a.reportError("commit", err)
+		return
+	}
+	if msg == "" {
+		a.hints.ShowInfo("Commit cancelled (empty message)")
+		return
+	}
+	a.runOp("Committing...", "commit",
+		func() error { return a.client.Commit(paths, msg) },
+		func() {
+			a.files.ClearMarks()
+			a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
+		})
 }
 
 func (a *App) doRevert() {
@@ -240,6 +276,92 @@ func (a *App) doResolved() {
 	})
 }
 
+func (a *App) doLoadMoreLog() {
+	oldest := a.log.OldestRevision()
+	if oldest <= 1 {
+		a.hints.ShowInfo("No more log entries")
+		return
+	}
+	path := a.log.Path()
+	go func() {
+		var entries []svn.LogEntry
+		var err error
+		if path != "" {
+			entries, err = a.client.LogPathBefore(path, oldest, a.logLimit)
+		} else {
+			entries, err = a.client.LogBefore(oldest, a.logLimit)
+		}
+		if err != nil {
+			a.reportError("log", err)
+			return
+		}
+		if len(entries) == 0 {
+			a.app.QueueUpdateDraw(func() {
+				a.hints.ShowInfo("No more log entries")
+			})
+			return
+		}
+		a.app.QueueUpdateDraw(func() {
+			a.log.AppendEntries(entries)
+			a.hints.ShowInfo(fmt.Sprintf("Loaded %d more log entries", len(entries)))
+		})
+	}()
+}
+
+func (a *App) doFileLog() {
+	entry := a.files.SelectedEntry()
+	if entry == nil {
+		return
+	}
+	path := entry.Path
+	// Toggle: if already filtered on this path, exit back to repo log.
+	if a.log.Path() == path {
+		a.doFileLogExit()
+		return
+	}
+	a.log.SetPathMode(path)
+	go func() {
+		logs, err := a.client.LogPath(path, a.logLimit)
+		if err != nil {
+			a.reportError("log", err)
+			a.app.QueueUpdateDraw(func() { a.log.SetPathMode("") })
+			return
+		}
+		a.app.QueueUpdateDraw(func() {
+			a.log.SetEntries(logs)
+			a.hints.ShowInfo(fmt.Sprintf("Filtered log to %s (%d entries) — Esc to exit", path, len(logs)))
+		})
+	}()
+}
+
+func (a *App) doFileLogExit() {
+	a.log.SetPathMode("")
+	a.refreshAsync()
+}
+
+func (a *App) doHelp() {
+	a.modalActive = true
+	HelpModal(a.app, a.root, func() {
+		a.modalActive = false
+	})
+}
+
+func (a *App) doFilter() {
+	a.modalActive = true
+	FilterPrompt(a.app, a.root, a.files.Filter(), func(pattern string, cancelled bool) {
+		a.modalActive = false
+		if cancelled {
+			return
+		}
+		a.files.SetFilter(pattern)
+		if pattern == "" {
+			a.hints.ShowInfo("Filter cleared")
+		} else {
+			a.hints.ShowInfo(fmt.Sprintf("Filter: %q", pattern))
+		}
+	})
+}
+
 func (a *App) doEdit() {
 	entry := a.files.SelectedEntry()
 	if entry == nil {
@@ -267,8 +389,14 @@ func (a *App) doUpdate() {
 			return nil
 		},
 		func() {
-			a.hints.ShowInfo(fmt.Sprintf("Updated to r%d (%d updated, %d added, %d deleted)",
-				summary.Revision, summary.Updated, summary.Added, summary.Deleted))
+			msg := fmt.Sprintf("Updated to r%d (%d updated, %d added, %d deleted)",
+				summary.Revision, summary.Updated, summary.Added, summary.Deleted)
+			if summary.Conflicted > 0 {
+				a.hints.ShowError(fmt.Sprintf("%s — ⚠ %d conflict(s); press e to edit, m to resolve",
+					msg, summary.Conflicted))
+			} else {
+				a.hints.ShowInfo(msg)
+			}
 		})
 }
 
@@ -284,25 +412,27 @@ func (a *App) updateHints() {
 	if a.focused == 0 {
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
-			{Key: "^u/^d", Label: "scroll"},
 			{Key: "Space", Label: "mark"},
-			{Key: "c", Label: "commit"},
+			{Key: "/", Label: "filter"},
+			{Key: "c/C", Label: "commit"},
 			{Key: "r", Label: "revert"},
 			{Key: "a", Label: "add"},
 			{Key: "x", Label: "delete"},
 			{Key: "e", Label: "edit"},
 			{Key: "m", Label: "resolve"},
+			{Key: "L", Label: "file log"},
 			{Key: "u", Label: "update"},
-			{Key: "R", Label: "refresh"},
+			{Key: "?", Label: "help"},
 			{Key: "q", Label: "quit"},
 		})
 	} else {
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
-			{Key: "^u/^d", Label: "scroll"},
+			{Key: "M", Label: "load more"},
+			{Key: "Esc", Label: "exit path"},
 			{Key: "Tab", Label: "switch"},
 			{Key: "u", Label: "update"},
-			{Key: "R", Label: "refresh"},
+			{Key: "?", Label: "help"},
 			{Key: "q", Label: "quit"},
 		})
 	}
@@ -368,6 +498,9 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case 'u':
 		a.doUpdate()
 		return nil
+	case '?':
+		a.doHelp()
+		return nil
 	}
 	return event
 }
@@ -394,7 +527,12 @@ func (a *App) refreshAsync() {
 			a.reportError("status", err)
 			return
 		}
-		logs, err := a.client.Log(a.logLimit)
+		var logs []svn.LogEntry
+		if path := a.log.Path(); path != "" {
+			logs, err = a.client.LogPath(path, a.logLimit)
+		} else {
+			logs, err = a.client.Log(a.logLimit)
+		}
 		if err != nil {
 			a.reportError("log", err)
 			return

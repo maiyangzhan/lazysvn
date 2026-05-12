@@ -20,6 +20,15 @@ func Confirm(app *tview.Application, root tview.Primitive, message string, onDon
 	app.SetRoot(modal, true)
 }
 
+// ShowSpinner displays a modal that blocks user input until the returned
+// dismiss function is called. Press Esc on the spinner to invoke onCancel
+// (typically cancels the context driving the running subprocess).
+//
+// ShowSpinner must be called from the tview main goroutine (i.e. from an
+// input handler). It sets the root directly rather than via QueueUpdateDraw
+// because tview.Application.QueueUpdate blocks on the main loop — calling
+// it from the main loop deadlocks. The dismiss function IS called from a
+// background goroutine, so it uses QueueUpdateDraw.
 func ShowSpinner(app *tview.Application, root tview.Primitive, message string, onCancel func()) func() {
 	modal := tview.NewModal().
 		SetText(message + "\n\n(Esc to cancel)")
@@ -33,9 +42,7 @@ func ShowSpinner(app *tview.Application, root tview.Primitive, message string, o
 		}
 		return event
 	})
-	app.QueueUpdateDraw(func() {
-		app.SetRoot(modal, true)
-	})
+	app.SetRoot(modal, true)
 	return func() {
 		app.QueueUpdateDraw(func() {
 			app.SetRoot(root, true)

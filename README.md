@@ -118,7 +118,7 @@ lazysvn --version           # print version and exit
 | Key | Action |
 |---|---|
 | `M` | Load more older log entries |
-| `L` | Pick any path in the working copy and drill into its single-file log. Uses `fzf` for fuzzy matching when it's on `$PATH`, falls back to a plain text prompt otherwise. |
+| `L` | Pick any path in the working copy and drill into its single-file log. When `fzf` is on `$PATH`, fzf streams candidates from `$FZF_DEFAULT_COMMAND` (if set) or from the fastest available of `fd` → `rg` → `find` (all configured to skip `.svn`); when fzf is missing, falls back to a plain text prompt. |
 | `Esc` | Exit single-file log mode (return to repo-wide log) |
 
 ### Global

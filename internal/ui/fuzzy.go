@@ -1,12 +1,10 @@
 package ui
 
 import (
+	"bytes"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/rivo/tview"
@@ -20,55 +18,38 @@ func fzfAvailable() bool {
 	return err == nil
 }
 
-// collectWCPaths walks the working copy and returns all file paths
-// relative to root, excluding SVN metadata directories. Paths are
-// sorted for stable fzf display.
-func collectWCPaths(root string) ([]string, error) {
-	var paths []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			// unreadable entry — skip silently rather than aborting the whole walk
-			return nil
-		}
-		if d.IsDir() {
-			if d.Name() == ".svn" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return nil
-		}
-		paths = append(paths, rel)
-		return nil
-	})
-	if err != nil {
-		return nil, err
+// fzfDefaultCommand returns the candidate-producing command fzf should
+// run. Respects the user's own FZF_DEFAULT_COMMAND if they've set one
+// (they likely tuned it). Otherwise picks the fastest available of
+// fd → rg → find, each configured to skip the .svn metadata directory.
+func fzfDefaultCommand() string {
+	if v := os.Getenv("FZF_DEFAULT_COMMAND"); v != "" {
+		return v
 	}
-	sort.Strings(paths)
-	return paths, nil
+	if _, err := exec.LookPath("fd"); err == nil {
+		return "fd --type f --hidden --exclude .svn"
+	}
+	if _, err := exec.LookPath("rg"); err == nil {
+		return "rg --files --hidden --glob '!.svn'"
+	}
+	return `find . -type f -not -path './.svn/*'`
 }
 
-// pickPathFuzzy suspends the tview app, runs fzf over the list of
-// working-copy files, and returns (selected, picked, err).
-// picked=false means the user cancelled fzf (Esc/Ctrl-C, exit 130) —
-// this is NOT an error and the caller should treat it as no-op.
-// Returns err when fzf is missing, when the walk fails, or when fzf
-// exits non-zero for reasons other than user-cancel.
+// pickPathFuzzy suspends the tview app and runs fzf. fzf itself runs
+// FZF_DEFAULT_COMMAND concurrently so its UI appears immediately and
+// candidates stream in while you type — no synchronous walk on the
+// lazysvn side.
+//
+// Returns (selected, picked, err). picked=false means the user
+// cancelled fzf (Esc/Ctrl-C/Ctrl-G, exit 130) — not an error. Returns
+// an error when fzf is missing or exits non-zero for other reasons.
 func pickPathFuzzy(app *tview.Application, wcRoot string) (string, bool, error) {
 	if !fzfAvailable() {
 		return "", false, fmt.Errorf("fzf not found on PATH")
 	}
-	paths, err := collectWCPaths(wcRoot)
-	if err != nil {
-		return "", false, fmt.Errorf("walk working copy: %w", err)
-	}
-	if len(paths) == 0 {
-		return "", false, fmt.Errorf("no files under %s", wcRoot)
-	}
 
-	logfile.Append(fmt.Sprintf("fzf: presenting %d paths under %s", len(paths), wcRoot))
+	defaultCmd := fzfDefaultCommand()
+	logfile.Append(fmt.Sprintf("fzf: FZF_DEFAULT_COMMAND=%q cwd=%s", defaultCmd, wcRoot))
 
 	var picked string
 	var cancelled bool
@@ -82,19 +63,30 @@ func pickPathFuzzy(app *tview.Application, wcRoot string) (string, bool, error) 
 			"--tiebreak=begin,length",
 			"--info=inline",
 		)
-		cmd.Stdin = strings.NewReader(strings.Join(paths, "\n"))
+		cmd.Dir = wcRoot
+		// Seed env with FZF_DEFAULT_COMMAND so fzf drives the file
+		// enumeration itself (streaming, concurrent with its UI startup).
+		env := os.Environ()
+		if os.Getenv("FZF_DEFAULT_COMMAND") == "" {
+			env = append(env, "FZF_DEFAULT_COMMAND="+defaultCmd)
+		}
+		cmd.Env = env
+		var out bytes.Buffer
+		cmd.Stdout = &out
 		cmd.Stderr = os.Stderr
-		out, err := cmd.Output()
-		if err != nil {
+		if err := cmd.Run(); err != nil {
 			if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 130 {
-				// user cancelled via Esc/Ctrl-C/Ctrl-G
 				cancelled = true
 				return
 			}
 			runErr = err
 			return
 		}
-		picked = strings.TrimSpace(string(out))
+		picked = strings.TrimSpace(out.String())
+		// Some candidate generators (notably `find .`) emit a leading
+		// "./" on each path. svn accepts it but the UI title looks
+		// nicer without it.
+		picked = strings.TrimPrefix(picked, "./")
 	})
 
 	if runErr != nil {

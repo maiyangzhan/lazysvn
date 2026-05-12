@@ -20,10 +20,19 @@ func Confirm(app *tview.Application, root tview.Primitive, message string, onDon
 	app.SetRoot(modal, true)
 }
 
-func ShowSpinner(app *tview.Application, root tview.Primitive, message string) func() {
+func ShowSpinner(app *tview.Application, root tview.Primitive, message string, onCancel func()) func() {
 	modal := tview.NewModal().
-		SetText(message)
+		SetText(message + "\n\n(Esc to cancel)")
 	modal.SetBackgroundColor(tcell.ColorDarkSlateGray)
+	modal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			if onCancel != nil {
+				onCancel()
+			}
+			return nil
+		}
+		return event
+	})
 	app.QueueUpdateDraw(func() {
 		app.SetRoot(modal, true)
 	})
@@ -144,11 +153,15 @@ func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
   Esc                exit single-file log mode
 
 [yellow::b]Global[-::-]
-  u                  svn update (spinner; warns on conflicts)
+  u                  svn update (spinner; Esc to cancel; warns on conflicts)
   R                  refresh status + log
   ?                  show this help
   q                  quit
 
+[yellow::b]Spinner (during long svn operations)[-::-]
+  Esc                cancel the running subprocess
+
+[grey]Operations are logged to ~/.cache/lazysvn/log for debugging.[-]
 [grey]Press Esc, ? or q to close[-]`
 
 	tv := tview.NewTextView()

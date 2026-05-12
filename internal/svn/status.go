@@ -1,6 +1,7 @@
 package svn
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 )
@@ -60,8 +61,8 @@ func mapStatus(item string) Status {
 	return Unknown
 }
 
-func (c *Client) Status() ([]FileEntry, error) {
-	out, err := c.run("status", "--xml")
+func (c *Client) Status(ctx context.Context) ([]FileEntry, error) {
+	out, err := c.run(ctx, "status", "--xml")
 	if err != nil {
 		return nil, err
 	}

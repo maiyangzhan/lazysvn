@@ -3,6 +3,7 @@ package svn
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -56,8 +57,8 @@ func parseUpdate(data []byte) (UpdateSummary, error) {
 	return s, scanner.Err()
 }
 
-func (c *Client) Update() (UpdateSummary, error) {
-	out, err := c.run("update")
+func (c *Client) Update(ctx context.Context) (UpdateSummary, error) {
+	out, err := c.run(ctx, "update")
 	if err != nil {
 		return UpdateSummary{}, err
 	}

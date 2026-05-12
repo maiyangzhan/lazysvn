@@ -160,6 +160,14 @@ cp -r vim-plugin/* ~/.vim/
 | `g:lazysvn_cmd` | `"lazysvn"` | Path to the lazysvn binary |
 | `g:lazysvn_no_default_mapping` | (unset) | Set to `1` to disable the `<Leader>s` mapping |
 
+## Troubleshooting
+
+Every `svn` subprocess (start, finish, duration, exit status, stderr tail on error) is logged to `~/.cache/lazysvn/log`. If an operation appears to hang:
+
+- Press `Esc` while the spinner is showing to cancel the running subprocess.
+- Tail the log to see which `svn` command is stuck: `tail -f ~/.cache/lazysvn/log`.
+- A common cause in locked-down environments is `svn+ssh://` where `ssh` needs a passphrase and reads `/dev/tty` directly; set up `ssh-agent` or a key without passphrase so the subprocess doesn't block on a prompt hidden behind the TUI.
+
 ## Requirements
 
 - **Runtime:** `svn` command-line client on `$PATH`

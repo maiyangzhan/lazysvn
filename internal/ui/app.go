@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -75,7 +76,7 @@ func (a *App) wireCallbacks() {
 			return
 		}
 		a.debounce.Do(100*time.Millisecond, func() {
-			diff, err := a.client.Diff(entry.Path)
+			diff, err := a.client.Diff(context.Background(), entry.Path)
 			a.app.QueueUpdateDraw(func() {
 				if err != nil {
 					a.preview.SetContent("Error: " + err.Error())
@@ -93,7 +94,7 @@ func (a *App) wireCallbacks() {
 			return
 		}
 		a.debounce.Do(100*time.Millisecond, func() {
-			diff, err := a.client.DiffRevision(entry.Revision)
+			diff, err := a.client.DiffRevision(context.Background(), entry.Revision)
 			a.app.QueueUpdateDraw(func() {
 				if err != nil {
 					a.preview.SetContent("Error: " + err.Error())
@@ -136,11 +137,20 @@ func (a *App) wireCallbacks() {
 	}
 }
 
-func (a *App) runOp(spinner, opName string, op func() error, onSuccess func()) {
-	dismiss := ShowSpinner(a.app, a.root, spinner)
+func (a *App) runOp(spinner, opName string, op func(ctx context.Context) error, onSuccess func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	dismiss := ShowSpinner(a.app, a.root, spinner, cancel)
 	go func() {
-		err := op()
+		err := op(ctx)
 		dismiss()
+		cancel() // release ctx resources; no-op if already cancelled
+		if ctx.Err() == context.Canceled {
+			a.app.QueueUpdateDraw(func() {
+				a.hints.ShowInfo(fmt.Sprintf("%s cancelled", opName))
+			})
+			a.refreshAsync()
+			return
+		}
 		if err != nil {
 			a.reportError(opName, err)
 			return
@@ -166,7 +176,7 @@ func (a *App) doCommit() {
 			return
 		}
 		a.runOp("Committing...", "commit",
-			func() error { return a.client.Commit(paths, msg) },
+			func(ctx context.Context) error { return a.client.Commit(ctx, paths, msg) },
 			func() {
 				a.files.ClearMarks()
 				a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
@@ -190,7 +200,7 @@ func (a *App) doCommitEditor() {
 		return
 	}
 	a.runOp("Committing...", "commit",
-		func() error { return a.client.Commit(paths, msg) },
+		func(ctx context.Context) error { return a.client.Commit(ctx, paths, msg) },
 		func() {
 			a.files.ClearMarks()
 			a.hints.ShowInfo(fmt.Sprintf("Committed %d file(s)", len(paths)))
@@ -211,7 +221,7 @@ func (a *App) doRevert() {
 			return
 		}
 		a.runOp("Reverting...", "revert",
-			func() error { return a.client.Revert(paths) },
+			func(ctx context.Context) error { return a.client.Revert(ctx, paths) },
 			func() {
 				a.files.ClearMarks()
 				a.hints.ShowInfo(fmt.Sprintf("Reverted %d file(s)", len(paths)))
@@ -226,7 +236,7 @@ func (a *App) doAdd() {
 	}
 	paths := entriesToPaths(targets)
 	a.runOp("Adding...", "add",
-		func() error { return a.client.Add(paths) },
+		func(ctx context.Context) error { return a.client.Add(ctx, paths) },
 		func() {
 			a.files.ClearMarks()
 			a.hints.ShowInfo(fmt.Sprintf("Added %d file(s)", len(paths)))
@@ -247,7 +257,7 @@ func (a *App) doRemove() {
 			return
 		}
 		a.runOp("Removing...", "remove",
-			func() error { return a.client.Remove(paths) },
+			func(ctx context.Context) error { return a.client.Remove(ctx, paths) },
 			func() {
 				a.files.ClearMarks()
 				a.hints.ShowInfo(fmt.Sprintf("Removed %d file(s)", len(paths)))
@@ -268,12 +278,35 @@ func (a *App) doResolved() {
 			return
 		}
 		a.runOp(fmt.Sprintf("Resolving (%s)...", mode), "resolve",
-			func() error { return a.client.Resolve(paths, mode) },
+			func(ctx context.Context) error { return a.client.Resolve(ctx, paths, mode) },
 			func() {
 				a.files.ClearMarks()
 				a.hints.ShowInfo(fmt.Sprintf("Resolved %d file(s) with --accept=%s", len(paths), mode))
 			})
 	})
+}
+
+func (a *App) doUpdate() {
+	var summary svn.UpdateSummary
+	a.runOp("Updating...", "update",
+		func(ctx context.Context) error {
+			s, err := a.client.Update(ctx)
+			if err != nil {
+				return err
+			}
+			summary = s
+			return nil
+		},
+		func() {
+			msg := fmt.Sprintf("Updated to r%d (%d updated, %d added, %d deleted)",
+				summary.Revision, summary.Updated, summary.Added, summary.Deleted)
+			if summary.Conflicted > 0 {
+				a.hints.ShowError(fmt.Sprintf("%s — ⚠ %d conflict(s); press e to edit, m to resolve",
+					msg, summary.Conflicted))
+			} else {
+				a.hints.ShowInfo(msg)
+			}
+		})
 }
 
 func (a *App) doLoadMoreLog() {
@@ -284,12 +317,13 @@ func (a *App) doLoadMoreLog() {
 	}
 	path := a.log.Path()
 	go func() {
+		ctx := context.Background()
 		var entries []svn.LogEntry
 		var err error
 		if path != "" {
-			entries, err = a.client.LogPathBefore(path, oldest, a.logLimit)
+			entries, err = a.client.LogPathBefore(ctx, path, oldest, a.logLimit)
 		} else {
-			entries, err = a.client.LogBefore(oldest, a.logLimit)
+			entries, err = a.client.LogBefore(ctx, oldest, a.logLimit)
 		}
 		if err != nil {
 			a.reportError("log", err)
@@ -321,7 +355,7 @@ func (a *App) doFileLog() {
 	}
 	a.log.SetPathMode(path)
 	go func() {
-		logs, err := a.client.LogPath(path, a.logLimit)
+		logs, err := a.client.LogPath(context.Background(), path, a.logLimit)
 		if err != nil {
 			a.reportError("log", err)
 			a.app.QueueUpdateDraw(func() { a.log.SetPathMode("") })
@@ -377,29 +411,6 @@ func (a *App) doEdit() {
 	a.refreshAsync()
 }
 
-func (a *App) doUpdate() {
-	var summary svn.UpdateSummary
-	a.runOp("Updating...", "update",
-		func() error {
-			s, err := a.client.Update()
-			if err != nil {
-				return err
-			}
-			summary = s
-			return nil
-		},
-		func() {
-			msg := fmt.Sprintf("Updated to r%d (%d updated, %d added, %d deleted)",
-				summary.Revision, summary.Updated, summary.Added, summary.Deleted)
-			if summary.Conflicted > 0 {
-				a.hints.ShowError(fmt.Sprintf("%s — ⚠ %d conflict(s); press e to edit, m to resolve",
-					msg, summary.Conflicted))
-			} else {
-				a.hints.ShowInfo(msg)
-			}
-		})
-}
-
 func (a *App) reportError(op string, err error) {
 	msg := fmt.Sprintf("%s: %s", op, err.Error())
 	logfile.Append(msg)
@@ -439,11 +450,12 @@ func (a *App) updateHints() {
 }
 
 func (a *App) Run() error {
-	entries, err := a.client.Status()
+	ctx := context.Background()
+	entries, err := a.client.Status(ctx)
 	if err != nil {
 		return err
 	}
-	logs, err := a.client.Log(a.logLimit)
+	logs, err := a.client.Log(ctx, a.logLimit)
 	if err != nil {
 		return err
 	}
@@ -522,16 +534,17 @@ func (a *App) setFocus(idx int) {
 
 func (a *App) refreshAsync() {
 	go func() {
-		entries, err := a.client.Status()
+		ctx := context.Background()
+		entries, err := a.client.Status(ctx)
 		if err != nil {
 			a.reportError("status", err)
 			return
 		}
 		var logs []svn.LogEntry
 		if path := a.log.Path(); path != "" {
-			logs, err = a.client.LogPath(path, a.logLimit)
+			logs, err = a.client.LogPath(ctx, path, a.logLimit)
 		} else {
-			logs, err = a.client.Log(a.logLimit)
+			logs, err = a.client.Log(ctx, a.logLimit)
 		}
 		if err != nil {
 			a.reportError("log", err)

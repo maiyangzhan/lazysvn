@@ -209,7 +209,9 @@ func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
 
 [yellow::b]Log panel[-::-]
   M                  load more older entries
-  L                  single-file log for an arbitrary path (prompt)
+  L                  single-file log for an arbitrary path
+                       (fuzzy-picks via fzf when available;
+                        otherwise a text prompt)
   Esc                exit single-file log mode
 
 [yellow::b]Global[-::-]

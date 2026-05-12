@@ -16,7 +16,7 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 - **File operations** — commit, revert, add, delete, all with single-key shortcuts
 - **Multi-select** — `Space` to mark multiple files for batch operations
 - **File filter** — `/` filters the file panel by path substring
-- **Single-file log drill-down** — `L` on a file shows only its history and scopes the preview to that file's changes at each revision; `M` loads more older entries; in the Log panel, `L` prompts for an arbitrary path, including files not in the Files panel
+- **Single-file log drill-down** — `L` on a file shows only its history and scopes the preview to that file's changes at each revision; `M` loads more older entries; in the Log panel, `L` opens `fzf` (when available) to fuzzy-pick any path in the working copy, including files with no pending changes
 - **Live diff preview** — auto-updates as you navigate, with syntax coloring and per-path caching
 - **Conflict resolution** — pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` from a modal when resolving
 - **In-app editor launch** — `e` opens `$EDITOR` on the current file (honors `VIM_SERVERNAME`); UI returns and refreshes automatically
@@ -118,7 +118,7 @@ lazysvn --version           # print version and exit
 | Key | Action |
 |---|---|
 | `M` | Load more older log entries |
-| `L` | Prompt for an arbitrary path and switch into single-file log mode (useful for paths not in the Files panel, e.g. clean files) |
+| `L` | Pick any path in the working copy and drill into its single-file log. Uses `fzf` for fuzzy matching when it's on `$PATH`, falls back to a plain text prompt otherwise. |
 | `Esc` | Exit single-file log mode (return to repo-wide log) |
 
 ### Global

@@ -362,8 +362,29 @@ func (a *App) doFileLog() {
 
 // doFileLogPrompt is bound to L in the log panel: lets the user type a
 // path (any path, even one that has no pending changes and therefore
-// isn't shown in the Files panel).
+// isn't shown in the Files panel). When fzf is on PATH it's used for
+// fuzzy matching across the working-copy tree; otherwise a plain text
+// PathPrompt is shown as a fallback.
 func (a *App) doFileLogPrompt() {
+	if fzfAvailable() {
+		path, picked, err := pickPathFuzzy(a.app, a.client.CWD())
+		if err != nil {
+			a.reportError("fzf", err)
+			// Fall back to the text prompt so the feature isn't dead
+			// if fzf fails mid-session.
+			a.doFileLogPromptText()
+			return
+		}
+		if !picked {
+			return
+		}
+		a.doFileLogFor(path)
+		return
+	}
+	a.doFileLogPromptText()
+}
+
+func (a *App) doFileLogPromptText() {
 	a.modalActive = true
 	PathPrompt(a.app, a.root, a.log.Path(), func(path string, cancelled bool) {
 		a.modalActive = false

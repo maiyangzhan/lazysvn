@@ -19,6 +19,11 @@ func New(cwd string) *Client {
 	return &Client{cwd: cwd}
 }
 
+// CWD returns the working-copy directory the client was configured with.
+func (c *Client) CWD() string {
+	return c.cwd
+}
+
 func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()

@@ -10,12 +10,13 @@ import (
 )
 
 type LogPanel struct {
-	list       *tview.List
-	entries    []svn.LogEntry
-	path       string // non-empty = path-filter mode ("single-file log")
-	OnSelect   func(entry svn.LogEntry)
-	OnLoadMore func()
+	list         *tview.List
+	entries      []svn.LogEntry
+	path         string // non-empty = path-filter mode ("single-file log")
+	OnSelect     func(entry svn.LogEntry)
+	OnLoadMore   func()
 	OnTogglePath func()
+	OnPromptPath func()
 }
 
 func NewLogPanel() *LogPanel {
@@ -44,6 +45,11 @@ func NewLogPanel() *LogPanel {
 		case 'M':
 			if p.OnLoadMore != nil {
 				p.OnLoadMore()
+			}
+			return nil
+		case 'L':
+			if p.OnPromptPath != nil {
+				p.OnPromptPath()
 			}
 			return nil
 		}

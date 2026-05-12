@@ -89,18 +89,25 @@ func (a *App) wireCallbacks() {
 	}
 
 	a.log.OnSelect = func(entry svn.LogEntry) {
-		if cached, ok := a.diffs.getRev(entry.Revision); ok {
+		path := a.log.Path() // "" for repo-wide log; otherwise file-filter mode
+		if cached, ok := a.diffs.getRev(entry.Revision, path); ok {
 			a.preview.SetContent(diffOrEmpty(cached))
 			return
 		}
 		a.debounce.Do(100*time.Millisecond, func() {
-			diff, err := a.client.DiffRevision(context.Background(), entry.Revision)
+			var diff string
+			var err error
+			if path != "" {
+				diff, err = a.client.DiffRevisionPath(context.Background(), entry.Revision, path)
+			} else {
+				diff, err = a.client.DiffRevision(context.Background(), entry.Revision)
+			}
 			a.app.QueueUpdateDraw(func() {
 				if err != nil {
 					a.preview.SetContent("Error: " + err.Error())
 					return
 				}
-				a.diffs.setRev(entry.Revision, diff)
+				a.diffs.setRev(entry.Revision, path, diff)
 				a.preview.SetContent(diffOrEmpty(diff))
 			})
 		})
@@ -134,6 +141,9 @@ func (a *App) wireCallbacks() {
 	}
 	a.log.OnTogglePath = func() {
 		a.doFileLogExit()
+	}
+	a.log.OnPromptPath = func() {
+		a.doFileLogPrompt()
 	}
 }
 
@@ -347,8 +357,30 @@ func (a *App) doFileLog() {
 	if entry == nil {
 		return
 	}
-	path := entry.Path
-	// Toggle: if already filtered on this path, exit back to repo log.
+	a.doFileLogFor(entry.Path)
+}
+
+// doFileLogPrompt is bound to L in the log panel: lets the user type a
+// path (any path, even one that has no pending changes and therefore
+// isn't shown in the Files panel).
+func (a *App) doFileLogPrompt() {
+	a.modalActive = true
+	PathPrompt(a.app, a.root, a.log.Path(), func(path string, cancelled bool) {
+		a.modalActive = false
+		if cancelled {
+			return
+		}
+		if path == "" {
+			a.doFileLogExit()
+			return
+		}
+		a.doFileLogFor(path)
+	})
+}
+
+// doFileLogFor switches the Log panel into path-filter mode for the
+// given path, or exits path mode if it's already the active path.
+func (a *App) doFileLogFor(path string) {
 	if a.log.Path() == path {
 		a.doFileLogExit()
 		return
@@ -440,6 +472,7 @@ func (a *App) updateHints() {
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
 			{Key: "M", Label: "load more"},
+			{Key: "L", Label: "path log"},
 			{Key: "Esc", Label: "exit path"},
 			{Key: "Tab", Label: "switch"},
 			{Key: "u", Label: "update"},

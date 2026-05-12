@@ -134,6 +134,58 @@ func CommitPrompt(app *tview.Application, root tview.Primitive, onDone func(msg 
 	app.SetFocus(input)
 }
 
+// PathPrompt asks for a path to filter the log panel on. Empty pattern
+// means exit path mode. onDone receives the trimmed path and whether
+// the user cancelled via Esc.
+func PathPrompt(app *tview.Application, root tview.Primitive, initial string, onDone func(path string, cancelled bool)) {
+	input := tview.NewInputField()
+	input.SetLabel("Path: ")
+	input.SetFieldWidth(46)
+	input.SetLabelColor(tcell.ColorYellow)
+	input.SetText(initial)
+
+	hint := tview.NewTextView()
+	hint.SetDynamicColors(true)
+	hint.SetTextAlign(tview.AlignCenter)
+	hint.SetText("[yellow]Enter[white]: apply  [yellow]Esc[white]: cancel  [grey](empty = exit path mode)[-]")
+	hint.SetBackgroundColor(tcell.ColorDarkSlateGray)
+
+	frame := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(input, 1, 0, true).
+		AddItem(nil, 0, 1, false).
+		AddItem(hint, 1, 0, false)
+	frame.SetBorder(true)
+	frame.SetTitle(" Single-file Log ")
+	frame.SetTitleColor(tcell.ColorYellow)
+	frame.SetBorderColor(tcell.ColorBlue)
+
+	wrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(frame, 60, 0, true).
+			AddItem(nil, 0, 1, false),
+			6, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	input.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			p := strings.TrimSpace(input.GetText())
+			app.SetRoot(root, true)
+			onDone(p, false)
+			return
+		}
+		if key == tcell.KeyEscape {
+			app.SetRoot(root, true)
+			onDone("", true)
+		}
+	})
+
+	app.SetRoot(wrapper, true)
+	app.SetFocus(input)
+}
+
 // HelpModal shows a full keybinding reference. Calls onClose when
 // dismissed (Esc / ? / q). Caller is responsible for tracking modalActive.
 func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
@@ -157,6 +209,7 @@ func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
 
 [yellow::b]Log panel[-::-]
   M                  load more older entries
+  L                  single-file log for an arbitrary path (prompt)
   Esc                exit single-file log mode
 
 [yellow::b]Global[-::-]
@@ -261,3 +314,5 @@ func FilterPrompt(app *tview.Application, root tview.Primitive, initial string, 
 	app.SetRoot(wrapper, true)
 	app.SetFocus(input)
 }
+
+// PathPrompt asks for a path to filter the log panel on. Empty pattern

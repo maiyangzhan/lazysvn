@@ -21,16 +21,23 @@ func fzfAvailable() bool {
 // fzfDefaultCommand returns the candidate-producing command fzf should
 // run. Respects the user's own FZF_DEFAULT_COMMAND if they've set one
 // (they likely tuned it). Otherwise picks the fastest available of
-// fd → rg → find, each configured to skip the .svn metadata directory.
+// fd → rg → find.
+//
+// The fd/rg defaults pass --no-ignore-vcs on purpose: without it, both
+// tools respect an upstream .gitignore (e.g. one in a parent directory
+// that happens to be a git repo), which for an SVN working copy often
+// hides every file. With --no-ignore-vcs the .gitignore is ignored but
+// .ignore / .fdignore files are still respected — so users who want
+// fuzzy-exclude rules can drop a `.ignore` in their WC.
 func fzfDefaultCommand() string {
 	if v := os.Getenv("FZF_DEFAULT_COMMAND"); v != "" {
 		return v
 	}
 	if _, err := exec.LookPath("fd"); err == nil {
-		return "fd --type f --hidden --exclude .svn"
+		return "fd --type f --hidden --no-ignore-vcs --exclude .svn"
 	}
 	if _, err := exec.LookPath("rg"); err == nil {
-		return "rg --files --hidden --glob '!.svn'"
+		return "rg --files --hidden --no-ignore-vcs --glob '!.svn'"
 	}
 	return `find . -type f -not -path './.svn/*'`
 }

@@ -1,7 +1,21 @@
 function! lazysvn#open() abort
   let l:cmd = g:lazysvn_cmd
 
-  if exists('v:servername') && v:servername !=# ''
+  " Optional: propagate v:servername so lazysvn's 'C' (commit via
+  " editor) and 'e' (edit file) open the buffer in this vim instance
+  " via `vim --servername X --remote-wait-silent`.
+  "
+  " Disabled by default because the vim remote protocol has enough
+  " environmental pitfalls (vim without +clientserver, neovim's
+  " different RPC, user autocmds that misbehave with
+  " --remote-wait-silent) that it surprises people. When disabled,
+  " lazysvn suspends its TUI and launches $EDITOR in the same terminal
+  " (a nested vim buffer inside the popup is mildly ugly but reliable).
+  "
+  " Opt in with: let g:lazysvn_vim_remote = 1
+  if get(g:, 'lazysvn_vim_remote', 0)
+        \ && exists('v:servername') && v:servername !=# ''
+        \ && has('clientserver')
     let $VIM_SERVERNAME = v:servername
   endif
 

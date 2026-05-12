@@ -159,6 +159,7 @@ cp -r vim-plugin/* ~/.vim/
 |---|---|---|
 | `g:lazysvn_cmd` | `"lazysvn"` | Path to the lazysvn binary |
 | `g:lazysvn_no_default_mapping` | (unset) | Set to `1` to disable the `<Leader>s` mapping |
+| `g:lazysvn_vim_remote` | (unset) | Set to `1` to propagate `v:servername` so lazysvn's `C` / `e` open files in the parent vim via `--remote-wait-silent`. Requires a vim built with `+clientserver`. Off by default because of portability issues (minimal vim, Neovim, user autocmds); when off, `C`/`e` suspend lazysvn and run `$EDITOR` in the same terminal. |
 
 ## Troubleshooting
 

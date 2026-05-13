@@ -74,6 +74,13 @@ func pickPathFuzzy(app *tview.Application, wcRoot string) (string, bool, error) 
 			"--info=inline",
 		)
 		cmd.Dir = wcRoot
+		// fzf only runs FZF_DEFAULT_COMMAND when its stdin is a TTY.
+		// Go's exec connects an unset Stdin to /dev/null, which fzf
+		// treats as "user piped candidates in" — it then reads stdin
+		// (gets EOF immediately) and ignores FZF_DEFAULT_COMMAND
+		// entirely, producing zero candidates. During app.Suspend our
+		// os.Stdin IS the terminal, so wiring it through fixes that.
+		cmd.Stdin = os.Stdin
 		// Force FZF_DEFAULT_COMMAND to our chosen value so a shell-level
 		// setting (commonly git-oriented) doesn't leak in and hide files.
 		cmd.Env = replaceOrAppendEnv(os.Environ(), "FZF_DEFAULT_COMMAND", defaultCmd)

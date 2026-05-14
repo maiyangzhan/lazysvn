@@ -26,6 +26,11 @@ func fzfAvailable() bool {
 //      .gitignore doesn't silently hide every file in an SVN WC, but
 //      .ignore / .fdignore files remain respected.
 //
+// Defaults intentionally include directories (no --type f for fd; no
+// -type f for find) so that callers like the X-delete picker can pick
+// directories. rg has no equivalent dir-emitting mode and stays
+// files-only.
+//
 // The shell's $FZF_DEFAULT_COMMAND is INTENTIONALLY ignored here.
 // That var is often tuned for git workflows (e.g. `git ls-files`) and
 // inheriting it inside lazysvn has shipped zero-file surprises to
@@ -36,12 +41,12 @@ func fzfDefaultCommand() (cmd, source string) {
 		return v, "LAZYSVN_FZF_CMD"
 	}
 	if _, err := exec.LookPath("fd"); err == nil {
-		return "fd --type f --hidden --no-ignore-vcs --exclude .svn", "fd (default)"
+		return "fd --hidden --no-ignore-vcs --exclude .svn", "fd (default)"
 	}
 	if _, err := exec.LookPath("rg"); err == nil {
 		return "rg --files --hidden --no-ignore-vcs --glob '!.svn'", "rg (default)"
 	}
-	return `find . -type f -not -path './.svn/*'`, "find (default)"
+	return `find . -mindepth 1 -not -path './.svn/*' -not -path './.svn'`, "find (default)"
 }
 
 // pickPathFuzzy suspends the tview app and runs fzf. fzf itself runs
@@ -49,30 +54,38 @@ func fzfDefaultCommand() (cmd, source string) {
 // candidates stream in while you type — no synchronous walk on the
 // lazysvn side.
 //
+// When multi is true, fzf is started with --multi and the user may
+// Tab-toggle multiple selections; the returned slice has one entry
+// per selection. When multi is false, the slice has zero or one entry.
+//
 // Returns (selected, picked, err). picked=false means the user
 // cancelled fzf (Esc/Ctrl-C/Ctrl-G, exit 130) — not an error. Returns
 // an error when fzf is missing or exits non-zero for other reasons.
-func pickPathFuzzy(app *tview.Application, wcRoot string) (string, bool, error) {
+func pickPathFuzzy(app *tview.Application, wcRoot string, multi bool) ([]string, bool, error) {
 	if !fzfAvailable() {
-		return "", false, fmt.Errorf("fzf not found on PATH")
+		return nil, false, fmt.Errorf("fzf not found on PATH")
 	}
 
 	defaultCmd, source := fzfDefaultCommand()
-	logfile.Append(fmt.Sprintf("fzf: FZF_DEFAULT_COMMAND=%q source=%s cwd=%s", defaultCmd, source, wcRoot))
+	logfile.Append(fmt.Sprintf("fzf: FZF_DEFAULT_COMMAND=%q source=%s cwd=%s multi=%v", defaultCmd, source, wcRoot, multi))
 
-	var picked string
+	var rawOut string
 	var cancelled bool
 	var runErr error
 	var stderrBuf bytes.Buffer
 
 	app.Suspend(func() {
-		cmd := exec.Command("fzf",
+		args := []string{
 			"--prompt=path> ",
 			"--reverse",
 			"--height=60%",
 			"--tiebreak=begin,length",
 			"--info=inline",
-		)
+		}
+		if multi {
+			args = append(args, "--multi")
+		}
+		cmd := exec.Command("fzf", args...)
 		cmd.Dir = wcRoot
 		// fzf only runs FZF_DEFAULT_COMMAND when its stdin is a TTY.
 		// Go's exec connects an unset Stdin to /dev/null, which fzf
@@ -95,8 +108,7 @@ func pickPathFuzzy(app *tview.Application, wcRoot string) (string, bool, error) 
 			runErr = err
 			return
 		}
-		picked = strings.TrimSpace(out.String())
-		picked = strings.TrimPrefix(picked, "./")
+		rawOut = out.String()
 	})
 
 	if runErr != nil {
@@ -105,17 +117,25 @@ func pickPathFuzzy(app *tview.Application, wcRoot string) (string, bool, error) 
 			tail = tail[:400] + "..."
 		}
 		logfile.Append(fmt.Sprintf("fzf: FAILED %v stderr=%q", runErr, tail))
-		return "", false, runErr
+		return nil, false, runErr
 	}
 	if cancelled {
 		logfile.Append("fzf: cancelled by user")
-		return "", false, nil
+		return nil, false, nil
 	}
-	if picked == "" {
+	var picked []string
+	for _, line := range strings.Split(rawOut, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "./")
+		if line != "" {
+			picked = append(picked, line)
+		}
+	}
+	if len(picked) == 0 {
 		logfile.Append("fzf: no selection (empty result — candidate command may have produced zero lines)")
-		return "", false, nil
+		return nil, false, nil
 	}
-	logfile.Append(fmt.Sprintf("fzf: picked %q", picked))
+	logfile.Append(fmt.Sprintf("fzf: picked %d path(s) — first=%q", len(picked), picked[0]))
 	return picked, true, nil
 }
 

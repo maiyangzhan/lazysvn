@@ -125,6 +125,8 @@ func (a *App) wireCallbacks() {
 			a.doAdd()
 		case 'x':
 			a.doRemove()
+		case 'X':
+			a.doRemoveAny()
 		case 'm':
 			a.doResolved()
 		case 'e':
@@ -275,6 +277,38 @@ func (a *App) doRemove() {
 	})
 }
 
+// doRemoveAny lets the user fuzzy-pick any path in the working copy
+// (file or directory, even ones that have no pending changes and
+// therefore aren't in the Files panel) and svn-rm it. fzf's --multi
+// is enabled so several paths can be batched in one operation.
+func (a *App) doRemoveAny() {
+	if !fzfAvailable() {
+		a.hints.ShowError("X needs fzf on PATH")
+		return
+	}
+	paths, picked, err := pickPathFuzzy(a.app, a.client.CWD(), true)
+	if err != nil {
+		a.reportError("fzf", err)
+		return
+	}
+	if !picked || len(paths) == 0 {
+		return
+	}
+	msg := fmt.Sprintf("svn rm %d path(s)?  (e.g. %s)", len(paths), paths[0])
+	a.modalActive = true
+	Confirm(a.app, a.root, msg, func(yes bool) {
+		a.modalActive = false
+		if !yes {
+			return
+		}
+		a.runOp("Removing...", "remove",
+			func(ctx context.Context) error { return a.client.Remove(ctx, paths) },
+			func() {
+				a.hints.ShowInfo(fmt.Sprintf("svn rm: %d path(s)", len(paths)))
+			})
+	})
+}
+
 func (a *App) doResolved() {
 	targets := a.files.MarkedOrCurrent()
 	if len(targets) == 0 {
@@ -367,7 +401,7 @@ func (a *App) doFileLog() {
 // PathPrompt is shown as a fallback.
 func (a *App) doFileLogPrompt() {
 	if fzfAvailable() {
-		path, picked, err := pickPathFuzzy(a.app, a.client.CWD())
+		paths, picked, err := pickPathFuzzy(a.app, a.client.CWD(), false)
 		if err != nil {
 			a.reportError("fzf", err)
 			// Fall back to the text prompt so the feature isn't dead
@@ -375,10 +409,10 @@ func (a *App) doFileLogPrompt() {
 			a.doFileLogPromptText()
 			return
 		}
-		if !picked {
+		if !picked || len(paths) == 0 {
 			return
 		}
-		a.doFileLogFor(path)
+		a.doFileLogFor(paths[0])
 		return
 	}
 	a.doFileLogPromptText()
@@ -499,11 +533,11 @@ func (a *App) updateHints() {
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
 			{Key: "Space", Label: "mark"},
-			{Key: "/", Label: "filter"},
+			{Key: "/", Label: "find"},
 			{Key: "c/C", Label: "commit"},
 			{Key: "r", Label: "revert"},
 			{Key: "a", Label: "add"},
-			{Key: "x", Label: "delete"},
+			{Key: "x/X", Label: "delete"},
 			{Key: "e", Label: "edit"},
 			{Key: "m", Label: "resolve"},
 			{Key: "L", Label: "file log"},

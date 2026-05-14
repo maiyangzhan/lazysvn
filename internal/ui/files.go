@@ -48,7 +48,7 @@ func NewFilesPanel() *FilesPanel {
 		case ' ':
 			p.ToggleMark()
 			return nil
-		case '/', 'c', 'C', 'r', 'a', 'x', 'm', 'e', 'L':
+		case '/', 'c', 'C', 'r', 'a', 'x', 'X', 'm', 'e', 'L':
 			if p.OnAction != nil {
 				p.OnAction(event.Rune())
 			}

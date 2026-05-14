@@ -204,6 +204,8 @@ func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
   r                  revert (with confirmation)
   a                  add untracked to version control
   x                  delete (with confirmation)
+  X                  fzf-pick any path (incl. clean files / dirs) and
+                       svn-rm it; --multi for batch
   e                  open current file in $EDITOR
   m                  resolve conflict(s): mine / theirs / mark
   L                  single-file log for current item (toggle)

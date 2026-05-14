@@ -16,7 +16,7 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 - **File operations** — commit, revert, add, delete, all with single-key shortcuts
 - **Multi-select** — `Space` to mark multiple files for batch operations
 - **File filter / fuzzy find** — `/` opens an `fzf` picker over the panel and jumps the cursor to the selected entry; falls back to a substring filter when fzf isn't on `$PATH`
-- **Directory operations** — the Files panel also shows synthesized directory rows (path ends with `/`, status = worst child); marking a directory and pressing `c` / `r` / `a` / `x` / `m` operates on the whole subtree (`svn revert` / `svn resolve` get `--depth=infinity` automatically)
+- **Directory operations** — the Files panel also shows synthesized directory rows (path ends with `/`, status = worst child); marking a directory and pressing `c` / `r` / `a` / `x` / `m` operates on the whole subtree (`svn revert` / `svn resolve` get `--depth=infinity` automatically). `X` fuzzy-picks **any** path in the working copy (clean or dirty, files or dirs) for `svn rm`.
 - **Single-file log drill-down** — `L` on a file shows only its history and scopes the preview to that file's changes at each revision; `M` loads more older entries; in the Log panel, `L` opens `fzf` (when available) to fuzzy-pick any path in the working copy, including files with no pending changes
 - **Live diff preview** — auto-updates as you navigate, with syntax coloring and per-path caching
 - **Conflict resolution** — pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` from a modal when resolving
@@ -110,6 +110,7 @@ lazysvn --version           # print version and exit
 | `r` | Revert marked/current entry/entries (with confirmation; recurses into directories via `--depth=infinity`) |
 | `a` | Add untracked entry/entries to version control (recurses into directories) |
 | `x` | Delete entry/entries (with confirmation) |
+| `X` | Fuzzy-pick any path in the working copy via `fzf` (files **and** directories, even ones with no pending changes) and `svn rm` it. Tab in fzf to multi-select for batch removal. Requires fzf on `$PATH`. |
 | `e` | Open current file in `$EDITOR` (or `vi`); honors `VIM_SERVERNAME` |
 | `m` | Resolve conflict(s): pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` / mark resolved (recurses into directories) |
 | `L` | Toggle single-file log for the current item (toggle) |

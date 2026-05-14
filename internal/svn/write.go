@@ -15,7 +15,10 @@ func (c *Client) CommitFromFile(ctx context.Context, paths []string, msgFile str
 }
 
 func (c *Client) Revert(ctx context.Context, paths []string) error {
-	args := append([]string{"revert"}, paths...)
+	// --depth=infinity makes `svn revert` recurse into directories.
+	// Harmless on plain files. Without it, reverting a marked directory
+	// only resets the directory's own properties, not its contents.
+	args := append([]string{"revert", "--depth=infinity"}, paths...)
 	_, err := c.run(ctx, args...)
 	return err
 }
@@ -38,9 +41,10 @@ func (c *Client) Resolved(ctx context.Context, paths []string) error {
 
 // Resolve runs `svn resolve --accept=<mode>` on the given paths. Valid modes
 // are the same as svn's --accept flag: working, base, mine-conflict,
-// theirs-conflict, mine-full, theirs-full.
+// theirs-conflict, mine-full, theirs-full. --depth=infinity ensures
+// recursion when a path is a directory.
 func (c *Client) Resolve(ctx context.Context, paths []string, mode string) error {
-	args := append([]string{"resolve", "--accept", mode}, paths...)
+	args := append([]string{"resolve", "--depth=infinity", "--accept", mode}, paths...)
 	_, err := c.run(ctx, args...)
 	return err
 }

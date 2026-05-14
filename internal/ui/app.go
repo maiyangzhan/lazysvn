@@ -434,6 +434,28 @@ func (a *App) doHelp() {
 }
 
 func (a *App) doFilter() {
+	if fzfAvailable() {
+		paths := a.files.AllPaths()
+		if len(paths) == 0 {
+			return
+		}
+		picked, ok, err := pickFromList(a.app, paths, "file> ")
+		if err != nil {
+			a.reportError("fzf", err)
+			a.doFilterText()
+			return
+		}
+		if !ok {
+			return
+		}
+		a.files.JumpToPath(picked)
+		a.hints.ShowInfo(fmt.Sprintf("Jumped to %s", picked))
+		return
+	}
+	a.doFilterText()
+}
+
+func (a *App) doFilterText() {
 	a.modalActive = true
 	FilterPrompt(a.app, a.root, a.files.Filter(), func(pattern string, cancelled bool) {
 		a.modalActive = false

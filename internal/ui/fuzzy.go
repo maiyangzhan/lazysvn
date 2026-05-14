@@ -119,6 +119,62 @@ func pickPathFuzzy(app *tview.Application, wcRoot string) (string, bool, error) 
 	return picked, true, nil
 }
 
+// pickFromList runs fzf with the given candidates piped on stdin (no
+// FZF_DEFAULT_COMMAND involved). Returns (selected, picked, err);
+// picked=false means fzf was cancelled (not an error).
+func pickFromList(app *tview.Application, candidates []string, prompt string) (string, bool, error) {
+	if !fzfAvailable() {
+		return "", false, fmt.Errorf("fzf not found on PATH")
+	}
+	if len(candidates) == 0 {
+		return "", false, fmt.Errorf("no candidates")
+	}
+
+	var picked string
+	var cancelled bool
+	var runErr error
+	var stderrBuf bytes.Buffer
+
+	app.Suspend(func() {
+		cmd := exec.Command("fzf",
+			"--prompt="+prompt,
+			"--reverse",
+			"--height=60%",
+			"--tiebreak=begin,length",
+			"--info=inline",
+		)
+		// Candidates are explicit — pipe via stdin. fzf detects the
+		// non-TTY stdin and reads candidates from it instead of running
+		// FZF_DEFAULT_COMMAND.
+		cmd.Stdin = strings.NewReader(strings.Join(candidates, "\n"))
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 130 {
+				cancelled = true
+				return
+			}
+			runErr = err
+			return
+		}
+		picked = strings.TrimSpace(out.String())
+	})
+
+	if runErr != nil {
+		tail := strings.TrimSpace(stderrBuf.String())
+		if len(tail) > 400 {
+			tail = tail[:400] + "..."
+		}
+		logfile.Append(fmt.Sprintf("fzf(list): FAILED %v stderr=%q", runErr, tail))
+		return "", false, runErr
+	}
+	if cancelled || picked == "" {
+		return "", false, nil
+	}
+	return picked, true, nil
+}
+
 // replaceOrAppendEnv returns env with key set to val — replacing an
 // existing entry for key if present, otherwise appending.
 func replaceOrAppendEnv(env []string, key, val string) []string {

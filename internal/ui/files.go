@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 
@@ -123,6 +124,7 @@ func (p *FilesPanel) MarkedOrCurrent() []svn.FileEntry {
 }
 
 func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
+	entries = withSynthesizedDirs(entries)
 	sort.Slice(entries, func(i, j int) bool {
 		oi, oj := statusOrder(entries[i].Status), statusOrder(entries[j].Status)
 		if oi != oj {
@@ -136,12 +138,42 @@ func (p *FilesPanel) SetEntries(entries []svn.FileEntry) {
 	for _, e := range entries {
 		valid[e.Path] = true
 	}
-	for path := range p.marks {
-		if !valid[path] {
-			delete(p.marks, path)
+	for pth := range p.marks {
+		if !valid[pth] {
+			delete(p.marks, pth)
 		}
 	}
 	p.render()
+}
+
+// withSynthesizedDirs adds a row per ancestor directory of every file
+// entry, with the directory's status set to the worst of its children
+// (Conflicted > Modified > Added > Deleted > Untracked). Synthesized
+// dir paths end in "/" to distinguish them and to sort just before
+// their children. Lets the user mark a directory and run commit /
+// revert / etc. on the whole subtree.
+func withSynthesizedDirs(files []svn.FileEntry) []svn.FileEntry {
+	worst := map[string]svn.Status{}
+	for _, f := range files {
+		// don't re-synthesize from already-dir entries (defensive)
+		if strings.HasSuffix(f.Path, "/") {
+			continue
+		}
+		dir := path.Dir(f.Path)
+		for dir != "." && dir != "/" && dir != "" {
+			cur, ok := worst[dir]
+			if !ok || statusOrder(f.Status) < statusOrder(cur) {
+				worst[dir] = f.Status
+			}
+			dir = path.Dir(dir)
+		}
+	}
+	out := make([]svn.FileEntry, 0, len(files)+len(worst))
+	out = append(out, files...)
+	for d, s := range worst {
+		out = append(out, svn.FileEntry{Path: d + "/", Status: s})
+	}
+	return out
 }
 
 func (p *FilesPanel) render() {
@@ -199,6 +231,12 @@ func (p *FilesPanel) formatLabel(e svn.FileEntry) string {
 	if p.marks[e.Path] {
 		mark = "◆"
 	}
+	if strings.HasSuffix(e.Path, "/") {
+		// Synthesized directory row — color the path blue so the user
+		// can tell it from a regular file at a glance. Status letter is
+		// the worst of the directory's children.
+		return fmt.Sprintf("%s [%s]%s[-]  [blue]%s[-]", mark, statusColor(e.Status), statusLetter(e.Status), e.Path)
+	}
 	return fmt.Sprintf("%s [%s]%s[-]  %s", mark, statusColor(e.Status), statusLetter(e.Status), e.Path)
 }
 
@@ -215,6 +253,31 @@ func (p *FilesPanel) SelectedEntry() *svn.FileEntry {
 		return nil
 	}
 	return &p.entries[idx]
+}
+
+// AllPaths returns the path of every entry in the panel (including
+// synthesized directory rows), regardless of any active filter.
+func (p *FilesPanel) AllPaths() []string {
+	out := make([]string, 0, len(p.all))
+	for _, e := range p.all {
+		out = append(out, e.Path)
+	}
+	return out
+}
+
+// JumpToPath clears any active filter and moves the cursor to the
+// entry matching the given path. No-op if the path isn't in the panel.
+func (p *FilesPanel) JumpToPath(target string) {
+	if p.filter != "" {
+		p.filter = ""
+		p.render()
+	}
+	for i, e := range p.entries {
+		if e.Path == target {
+			p.list.SetCurrentItem(i)
+			return
+		}
+	}
 }
 
 func (p *FilesPanel) Focus() {

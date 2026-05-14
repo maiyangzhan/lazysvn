@@ -197,7 +197,8 @@ func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
 
 [yellow::b]Files panel[-::-]
   Space              toggle mark on current file
-  /                  filter files by path substring
+  /                  fuzzy-find a file (fzf if available; jumps cursor)
+                       fallback: text filter that narrows the panel
   c                  commit (single-line prompt)
   C                  commit via $EDITOR (multi-line)
   r                  revert (with confirmation)

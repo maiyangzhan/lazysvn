@@ -15,7 +15,8 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 - **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl-U`/`Ctrl-D` for preview scrolling
 - **File operations** — commit, revert, add, delete, all with single-key shortcuts
 - **Multi-select** — `Space` to mark multiple files for batch operations
-- **File filter** — `/` filters the file panel by path substring
+- **File filter / fuzzy find** — `/` opens an `fzf` picker over the panel and jumps the cursor to the selected entry; falls back to a substring filter when fzf isn't on `$PATH`
+- **Directory operations** — the Files panel also shows synthesized directory rows (path ends with `/`, status = worst child); marking a directory and pressing `c` / `r` / `a` / `x` / `m` operates on the whole subtree (`svn revert` / `svn resolve` get `--depth=infinity` automatically)
 - **Single-file log drill-down** — `L` on a file shows only its history and scopes the preview to that file's changes at each revision; `M` loads more older entries; in the Log panel, `L` opens `fzf` (when available) to fuzzy-pick any path in the working copy, including files with no pending changes
 - **Live diff preview** — auto-updates as you navigate, with syntax coloring and per-path caching
 - **Conflict resolution** — pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` from a modal when resolving
@@ -102,16 +103,16 @@ lazysvn --version           # print version and exit
 
 | Key | Action |
 |---|---|
-| `Space` | Toggle mark on current file |
-| `/` | Filter files by path substring (empty input clears filter) |
-| `c` | Commit marked/current file(s) — single-line prompt |
+| `Space` | Toggle mark on current entry (file or directory) |
+| `/` | Fuzzy-find an entry across the whole panel via `fzf` (jumps cursor to the picked entry). Falls back to a text-substring filter that narrows the panel when fzf isn't on `$PATH`. |
+| `c` | Commit marked/current entry/entries — works on directories too |
 | `C` | Commit via `$EDITOR` — multi-line message |
-| `r` | Revert marked/current file(s) (with confirmation) |
-| `a` | Add untracked file(s) to version control |
-| `x` | Delete file(s) (with confirmation) |
+| `r` | Revert marked/current entry/entries (with confirmation; recurses into directories via `--depth=infinity`) |
+| `a` | Add untracked entry/entries to version control (recurses into directories) |
+| `x` | Delete entry/entries (with confirmation) |
 | `e` | Open current file in `$EDITOR` (or `vi`); honors `VIM_SERVERNAME` |
-| `m` | Resolve conflict(s): pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` / mark resolved |
-| `L` | Toggle single-file log for the current item (filters the Log panel) |
+| `m` | Resolve conflict(s): pick `mine-conflict` / `theirs-conflict` / `mine-full` / `theirs-full` / mark resolved (recurses into directories) |
+| `L` | Toggle single-file log for the current item (toggle) |
 
 ### Log panel
 

@@ -54,11 +54,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # If a release for this tag already exists (e.g. pre-created with
         # custom notes), upload to it; otherwise create one with auto-generated
-        # notes. Uploads use --clobber so reruns are idempotent.
+        # notes. Uploads run per-file so a single duplicate doesn't fail the
+        # whole step (`gh release upload --clobber` over a multi-file glob has
+        # been observed to 422 spuriously when assets re-appear from earlier
+        # in the same invocation).
         run: |
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" \
               --title "$GITHUB_REF_NAME" \
               --generate-notes
           fi
-          gh release upload "$GITHUB_REF_NAME" dist/lazysvn-* --clobber
+          for f in dist/lazysvn-*; do
+            gh release upload "$GITHUB_REF_NAME" "$f" --clobber
+          done

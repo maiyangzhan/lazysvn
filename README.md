@@ -120,7 +120,7 @@ lazysvn --version           # print version and exit
 | Key | Action |
 |---|---|
 | `M` | Load more older log entries |
-| `L` | Pick any path in the working copy and drill into its single-file log. When `fzf` is on `$PATH`, fzf streams candidates from `$LAZYSVN_FZF_CMD` (if set) or from the fastest available of `fd` → `rg` → `find`. The `fd`/`rg` defaults pass `--no-ignore-vcs` so an upstream `.gitignore` doesn't hide everything in an SVN WC, while `.ignore` / `.fdignore` files **are** respected. Your shell's `$FZF_DEFAULT_COMMAND` is intentionally ignored to avoid git-oriented recipes hiding your SVN files; set `$LAZYSVN_FZF_CMD` for a lazysvn-specific override. When fzf is missing, falls back to a plain text prompt. |
+| `L` | Pick any path in the working copy and drill into its single-file log. When `fzf` is on `$PATH`, fzf streams candidates from `$LAZYSVN_FZF_CMD` (if set) or from the fastest available of `fd` → `fdfind` → `find` — all of which emit both files and directories. The defaults pass `--no-ignore-vcs` so an upstream `.gitignore` doesn't hide everything in an SVN WC, while `.ignore` / `.fdignore` files **are** respected. Your shell's `$FZF_DEFAULT_COMMAND` is intentionally ignored to avoid git-oriented recipes hiding your SVN files; set `$LAZYSVN_FZF_CMD` for a lazysvn-specific override. When fzf is missing, falls back to a plain text prompt. |
 | `Esc` | Exit single-file log mode (return to repo-wide log) |
 
 ### Global

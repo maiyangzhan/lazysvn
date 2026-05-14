@@ -22,20 +22,23 @@ func fzfAvailable() bool {
 // will hand to fzf. Resolution order:
 //
 //   1. $LAZYSVN_FZF_CMD — lazysvn-specific override.
-//   2. Our default: fd > rg > find, with --no-ignore-vcs so an upstream
-//      .gitignore doesn't silently hide every file in an SVN WC, but
-//      .ignore / .fdignore files remain respected.
+//   2. fd → fdfind → find. fd appends "/" to directory entries by
+//      default, so the picker shows a clear visual distinction
+//      between files and dirs. fdfind is the Debian/Ubuntu binary
+//      name for the same tool. find is the portable last resort.
 //
-// Defaults intentionally include directories (no --type f for fd; no
-// -type f for find) so that callers like the X-delete picker can pick
-// directories. rg has no equivalent dir-emitting mode and stays
-// files-only.
+// rg is intentionally NOT in the chain: rg is a content search tool,
+// not a path enumerator — `rg --files` only lists files and has no
+// equivalent --type d mode, which surprised users who expected the X
+// picker to include directories. If you specifically want rg, set
+// $LAZYSVN_FZF_CMD.
 //
-// The shell's $FZF_DEFAULT_COMMAND is INTENTIONALLY ignored here.
-// That var is often tuned for git workflows (e.g. `git ls-files`) and
-// inheriting it inside lazysvn has shipped zero-file surprises to
-// users whose SVN WC lives under a git-tracked parent. Users who want
-// a custom command for lazysvn should set $LAZYSVN_FZF_CMD.
+// --no-ignore-vcs keeps an upstream .gitignore from hiding everything
+// in an SVN WC. .ignore / .fdignore files remain respected.
+//
+// The shell's $FZF_DEFAULT_COMMAND is INTENTIONALLY ignored. Users
+// commonly tune it for git workflows; inheriting it inside lazysvn
+// has shipped zero-file surprises in the past.
 func fzfDefaultCommand() (cmd, source string) {
 	if v := os.Getenv("LAZYSVN_FZF_CMD"); v != "" {
 		return v, "LAZYSVN_FZF_CMD"
@@ -43,8 +46,8 @@ func fzfDefaultCommand() (cmd, source string) {
 	if _, err := exec.LookPath("fd"); err == nil {
 		return "fd --hidden --no-ignore-vcs --exclude .svn", "fd (default)"
 	}
-	if _, err := exec.LookPath("rg"); err == nil {
-		return "rg --files --hidden --no-ignore-vcs --glob '!.svn'", "rg (default)"
+	if _, err := exec.LookPath("fdfind"); err == nil {
+		return "fdfind --hidden --no-ignore-vcs --exclude .svn", "fdfind (default)"
 	}
 	return `find . -mindepth 1 -not -path './.svn/*' -not -path './.svn'`, "find (default)"
 }

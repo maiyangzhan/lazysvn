@@ -64,7 +64,8 @@ func NewApp(client *svn.Client, logLimit int) *App {
 		logLimit: logLimit,
 		diffs:    newDiffCache(),
 	}
-	a.panels = []focusable{a.files, a.log}
+	a.panels = []focusable{a.files, a.log, a.preview}
+	tapp.EnableMouse(true)
 	a.wireCallbacks()
 	return a
 }
@@ -146,6 +147,13 @@ func (a *App) wireCallbacks() {
 	}
 	a.log.OnPromptPath = func() {
 		a.doFileLogPrompt()
+	}
+
+	a.preview.OnSearchPrompt = func() {
+		a.doPreviewSearch()
+	}
+	a.preview.OnSearchClear = func() {
+		a.hints.ShowInfo("Preview search cleared")
 	}
 }
 
@@ -520,6 +528,28 @@ func (a *App) doEdit() {
 	a.refreshAsync()
 }
 
+func (a *App) doPreviewSearch() {
+	a.modalActive = true
+	SearchPrompt(a.app, a.root, a.preview.SearchTerm(), func(term string, cancelled bool) {
+		a.modalActive = false
+		// Return focus to the preview so n / N / Esc work immediately.
+		a.setFocus(2)
+		if cancelled {
+			return
+		}
+		n := a.preview.SetSearch(term)
+		if term == "" {
+			a.hints.ShowInfo("Preview search cleared")
+			return
+		}
+		if n == 0 {
+			a.hints.ShowError(fmt.Sprintf("No matches for %q", term))
+			return
+		}
+		a.hints.ShowInfo(fmt.Sprintf("%d match(es) for %q — n/N next/prev, Esc clear", n, term))
+	})
+}
+
 func (a *App) reportError(op string, err error) {
 	msg := fmt.Sprintf("%s: %s", op, err.Error())
 	logfile.Append(msg)
@@ -529,7 +559,8 @@ func (a *App) reportError(op string, err error) {
 }
 
 func (a *App) updateHints() {
-	if a.focused == 0 {
+	switch a.focused {
+	case 0:
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
 			{Key: "Space", Label: "mark"},
@@ -545,12 +576,23 @@ func (a *App) updateHints() {
 			{Key: "?", Label: "help"},
 			{Key: "q", Label: "quit"},
 		})
-	} else {
+	case 1:
 		a.hints.Set([]Hint{
 			{Key: "j/k", Label: "nav"},
 			{Key: "M", Label: "load more"},
 			{Key: "L", Label: "path log"},
 			{Key: "Esc", Label: "exit path"},
+			{Key: "Tab", Label: "switch"},
+			{Key: "u", Label: "update"},
+			{Key: "?", Label: "help"},
+			{Key: "q", Label: "quit"},
+		})
+	case 2:
+		a.hints.Set([]Hint{
+			{Key: "^u/^d", Label: "scroll"},
+			{Key: "/", Label: "search"},
+			{Key: "n/N", Label: "next/prev"},
+			{Key: "Esc", Label: "clear"},
 			{Key: "Tab", Label: "switch"},
 			{Key: "u", Label: "update"},
 			{Key: "?", Label: "help"},
@@ -588,6 +630,21 @@ func (a *App) Run() error {
 	a.app.SetRoot(root, true)
 	a.setFocus(0)
 	a.app.SetInputCapture(a.globalKeys)
+	// Keep a.focused in sync when the user clicks on a different panel.
+	// Skips work while a modal is up (modal owns root; none of our panels
+	// match GetFocus()).
+	a.app.SetAfterDrawFunc(func(_ tcell.Screen) {
+		if a.modalActive {
+			return
+		}
+		cur := a.app.GetFocus()
+		for i, p := range a.panels {
+			if p.View() == cur && a.focused != i {
+				a.setFocus(i)
+				return
+			}
+		}
+	})
 
 	return a.app.Run()
 }

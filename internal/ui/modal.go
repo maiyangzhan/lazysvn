@@ -193,7 +193,8 @@ func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
   j / k              move cursor down / up
   g / G              jump to first / last item
   Ctrl-U / Ctrl-D    scroll preview half-page up / down
-  Tab / Shift-Tab    switch between Files and Log panels
+  Tab / Shift-Tab    cycle focus: Files → Log → Preview
+  Mouse              click to focus a panel; wheel to scroll
 
 [yellow::b]Files panel[-::-]
   Space              toggle mark on current file
@@ -216,6 +217,11 @@ func HelpModal(app *tview.Application, root tview.Primitive, onClose func()) {
                        (fuzzy-picks via fzf when available;
                         otherwise a text prompt)
   Esc                exit single-file log mode
+
+[yellow::b]Preview panel[-::-]
+  /                  search the diff (case-insensitive substring)
+  n / N              jump to next / previous match
+  Esc                clear active search
 
 [yellow::b]Global[-::-]
   u                  svn update (spinner; Esc to cancel; warns on conflicts)
@@ -320,4 +326,55 @@ func FilterPrompt(app *tview.Application, root tview.Primitive, initial string, 
 	app.SetFocus(input)
 }
 
-// PathPrompt asks for a path to filter the log panel on. Empty pattern
+
+// SearchPrompt asks for a substring to search within the Preview panel.
+// Empty pattern means clear search. onDone receives the trimmed pattern
+// and whether the user cancelled via Esc.
+func SearchPrompt(app *tview.Application, root tview.Primitive, initial string, onDone func(pattern string, cancelled bool)) {
+	input := tview.NewInputField()
+	input.SetLabel("Search: ")
+	input.SetFieldWidth(46)
+	input.SetLabelColor(tcell.ColorYellow)
+	input.SetText(initial)
+
+	hint := tview.NewTextView()
+	hint.SetDynamicColors(true)
+	hint.SetTextAlign(tview.AlignCenter)
+	hint.SetText("[yellow]Enter[white]: search  [yellow]Esc[white]: cancel  [grey](empty = clear)[-]")
+	hint.SetBackgroundColor(tcell.ColorDarkSlateGray)
+
+	frame := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(input, 1, 0, true).
+		AddItem(nil, 0, 1, false).
+		AddItem(hint, 1, 0, false)
+	frame.SetBorder(true)
+	frame.SetTitle(" Search Diff ")
+	frame.SetTitleColor(tcell.ColorYellow)
+	frame.SetBorderColor(tcell.ColorBlue)
+
+	wrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(frame, 60, 0, true).
+			AddItem(nil, 0, 1, false),
+			6, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	input.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			p := strings.TrimSpace(input.GetText())
+			app.SetRoot(root, true)
+			onDone(p, false)
+			return
+		}
+		if key == tcell.KeyEscape {
+			app.SetRoot(root, true)
+			onDone("", true)
+		}
+	})
+
+	app.SetRoot(wrapper, true)
+	app.SetFocus(input)
+}

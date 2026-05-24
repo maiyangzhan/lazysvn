@@ -12,7 +12,9 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 ## Features
 
 - **Three-panel layout** — file status, commit log, and diff preview side by side
+- **Mouse support** — click any panel to focus it, wheel to scroll. (Most terminals require Shift-click or Option-drag to copy text once mouse mode is active.)
 - **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl-U`/`Ctrl-D` for preview scrolling
+- **Diff search** — focus the Preview pane (`Tab` cycles Files → Log → Preview, or click it), then `/` to search the diff text; `n`/`N` jump between matches, `Esc` clears
 - **File operations** — commit, revert, add, delete, all with single-key shortcuts
 - **Multi-select** — `Space` to mark multiple files for batch operations
 - **File filter / fuzzy find** — `/` opens an `fzf` picker over the panel and jumps the cursor to the selected entry; falls back to a substring filter when fzf isn't on `$PATH`
@@ -97,7 +99,9 @@ lazysvn --version           # print version and exit
 | `j` / `k` | Move cursor down / up |
 | `g` / `G` | Jump to first / last item |
 | `Ctrl-U` / `Ctrl-D` | Scroll preview half-page up / down |
-| `Tab` / `Shift-Tab` | Switch focus between Files and Log panels |
+| `Tab` / `Shift-Tab` | Cycle focus: Files → Log → Preview |
+| Mouse click | Focus the clicked panel |
+| Mouse wheel | Scroll the panel under the cursor |
 
 ### File Operations (Files panel)
 
@@ -122,6 +126,14 @@ lazysvn --version           # print version and exit
 | `M` | Load more older log entries |
 | `L` | Pick any path in the working copy and drill into its single-file log. When `fzf` is on `$PATH`, fzf streams candidates from `$LAZYSVN_FZF_CMD` (if set) or from the fastest available of `fd` → `fdfind` → `find` — all of which emit both files and directories. The defaults pass `--no-ignore-vcs` so an upstream `.gitignore` doesn't hide everything in an SVN WC, while `.ignore` / `.fdignore` files **are** respected. Your shell's `$FZF_DEFAULT_COMMAND` is intentionally ignored to avoid git-oriented recipes hiding your SVN files; set `$LAZYSVN_FZF_CMD` for a lazysvn-specific override. When fzf is missing, falls back to a plain text prompt. |
 | `Esc` | Exit single-file log mode (return to repo-wide log) |
+
+### Preview panel
+
+| Key | Action |
+|---|---|
+| `/` | Search the diff (case-insensitive substring). Matches are highlighted; the first one is scrolled into view. |
+| `n` / `N` | Jump to next / previous match |
+| `Esc` | Clear the active search |
 
 ### Global
 

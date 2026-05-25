@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -65,7 +66,9 @@ func NewApp(client *svn.Client, logLimit int) *App {
 		diffs:    newDiffCache(),
 	}
 	a.panels = []focusable{a.files, a.log, a.preview}
-	tapp.EnableMouse(true)
+	if os.Getenv("LAZYSVN_NO_MOUSE") == "" {
+		tapp.EnableMouse(true)
+	}
 	a.wireCallbacks()
 	return a
 }
@@ -602,6 +605,8 @@ func (a *App) updateHints() {
 }
 
 func (a *App) Run() error {
+	logfile.Append(fmt.Sprintf("startup: cwd=%s log-limit=%d mouse=%v",
+		a.client.CWD(), a.logLimit, os.Getenv("LAZYSVN_NO_MOUSE") == ""))
 	ctx := context.Background()
 	entries, err := a.client.Status(ctx)
 	if err != nil {
@@ -631,19 +636,28 @@ func (a *App) Run() error {
 	a.setFocus(0)
 	a.app.SetInputCapture(a.globalKeys)
 	// Keep a.focused in sync when the user clicks on a different panel.
-	// Skips work while a modal is up (modal owns root; none of our panels
-	// match GetFocus()).
-	a.app.SetAfterDrawFunc(func(_ tcell.Screen) {
-		if a.modalActive {
-			return
+	// Mouse capture runs on the event loop with no draw lock held, so
+	// calling setFocus from here is safe (afterDraw is NOT — tview's
+	// draw() holds Application.Lock() while invoking the callback, and
+	// SetFocus tries to take the same non-reentrant lock → deadlock).
+	a.app.SetMouseCapture(func(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+		if a.modalActive || event == nil {
+			return event, action
 		}
-		cur := a.app.GetFocus()
+		if action != tview.MouseLeftClick && action != tview.MouseLeftDown {
+			return event, action
+		}
+		mx, my := event.Position()
 		for i, p := range a.panels {
-			if p.View() == cur && a.focused != i {
-				a.setFocus(i)
-				return
+			x, y, w, h := p.View().GetRect()
+			if mx >= x && mx < x+w && my >= y && my < y+h {
+				if a.focused != i {
+					a.setFocus(i)
+				}
+				break
 			}
 		}
+		return event, action
 	})
 
 	return a.app.Run()

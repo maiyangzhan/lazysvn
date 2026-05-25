@@ -12,7 +12,7 @@ Browse file status, view diffs, commit, revert, and update — all without leavi
 ## Features
 
 - **Three-panel layout** — file status, commit log, and diff preview side by side
-- **Mouse support** — click any panel to focus it, wheel to scroll. (Most terminals require Shift-click or Option-drag to copy text once mouse mode is active.)
+- **Mouse support** — click any panel to focus it, wheel to scroll. (Most terminals require Shift-click or Option-drag to copy text once mouse mode is active.) Set `LAZYSVN_NO_MOUSE=1` to disable mouse mode entirely if your terminal misbehaves.
 - **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl-U`/`Ctrl-D` for preview scrolling
 - **Diff search** — focus the Preview pane (`Tab` cycles Files → Log → Preview, or click it), then `/` to search the diff text; `n`/`N` jump between matches, `Esc` clears
 - **File operations** — commit, revert, add, delete, all with single-key shortcuts
